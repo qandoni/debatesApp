@@ -46,5 +46,11 @@ migrate-action:
 		-database postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@debatesApp-postgres:5432/${POSTGRES_DB}?sslmode=disable \
 		"$(action)"
 
+debatesApp-run:
+	@export LOGGER_FOLDER=${PROJECT_ROOT}/out/logs && \
+	export POSTGRES_HOST=localhost && \
+	sudo go mod tidy && \
+	go run ${PROJECT_ROOT}/cmd/debates_app/main.go
+
 ps:
 	@docker compose ps
