@@ -1,0 +1,11 @@
+2026-08-27T14:02:01.322415	DEBUG	debates_app/main.go:40	initializing postgres connection pool
+2026-08-27T14:02:01.327132	DEBUG	debates_app/main.go:50	initializing transaction manager
+2026-08-27T14:02:01.327217	DEBUG	debates_app/main.go:53	initializing feature	{"feature": "users"}
+2026-08-27T14:02:01.327227	DEBUG	debates_app/main.go:58	initializing feature	{"feature": "auth"}
+2026-08-27T14:02:01.327233	DEBUG	debates_app/main.go:65	initializing HTTP server
+2026-08-27T14:02:01.327280	INFO	server/server.go:45	start HTTP server	{"addr": ":5050"}
+2026-08-27T14:02:04.637003	DEBUG	middleware/common.go:65	>>> incoming HTTP request	{"requestID": "f631a157-4b6d-42b8-8dcf-a82624f15a9b", "url": "/api/v1/auth/login", "http_method": "POST", "time": "2026-08-27T10:02:04.637003"}
+2026-08-27T14:02:04.683588	DEBUG	middleware/common.go:73	<<< done HTTP request	{"requestID": "f631a157-4b6d-42b8-8dcf-a82624f15a9b", "url": "/api/v1/auth/login", "status_code": 200, "latence": "46.582472ms"}
+2026-08-27T14:02:16.833306	DEBUG	middleware/common.go:65	>>> incoming HTTP request	{"requestID": "386da53f-d66e-41fd-aba4-095ac7e2cfa7", "url": "/api/v1/auth/registrate", "http_method": "POST", "time": "2026-08-27T10:02:16.833305"}
+2026-08-27T14:02:16.879376	DEBUG	middleware/common.go:73	<<< done HTTP request	{"requestID": "386da53f-d66e-41fd-aba4-095ac7e2cfa7", "url": "/api/v1/auth/registrate", "status_code": 201, "latence": "46.069829ms"}
+2026-08-27T14:06:39.925117	INFO	server/server.go:57	shutdown http server...

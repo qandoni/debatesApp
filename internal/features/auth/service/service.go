@@ -21,9 +21,9 @@ type UsersRepository interface {
 		ctx context.Context,
 		email string,
 	) (domain.User, error)
-	GetUser(
+	CreateUser(
 		ctx context.Context,
-		id int,
+		input domain.User,
 	) (domain.User, error)
 }
 

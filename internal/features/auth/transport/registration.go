@@ -7,38 +7,28 @@ import (
 	auth_contracts "github.com/qandoni/debatesApp/internal/features/auth/contracts"
 )
 
-type LoginRequest struct {
+type RegistrationRequest struct {
+	UserName string `json:"user_name"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
-type LoginResponse struct {
-	AccessToken string `json:"access_token"`
-}
-
-func (h *AuthHTTPHandler) Login(c *gin.Context) {
+func (h *AuthHTTPHandler) Registrate(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	var request LoginRequest
+	var request RegistrationRequest
 	if err := c.ShouldBindJSON(&request); err != nil {
 		c.Error(err).SetMeta("failed to decode and validate HTTP request")
 		return
 	}
-
-	input := auth_contracts.LoginInput{
+	input := auth_contracts.RegistrationInput{
+		UserName: request.UserName,
 		Email:    request.Email,
 		Password: request.Password,
 	}
-	output, err := h.authService.Login(
-		ctx,
-		input,
-	)
-	if err != nil {
-		c.Error(err).SetMeta("failed to login")
+	if err := h.authService.Registrate(ctx, input); err != nil {
+		c.Error(err).SetMeta("failed to registrate the user")
 		return
 	}
-	response := LoginResponse{
-		AccessToken: output.AccessToken,
-	}
-	c.JSON(http.StatusOK, response)
+	c.Status(http.StatusCreated)
 }
