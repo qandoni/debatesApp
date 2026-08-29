@@ -15,7 +15,7 @@ func (h *UsersHTTPHandler) GetMyProfile(c *gin.Context) {
 
 	authInfo, ok := core_auth.AuthInfoFromContext(ctx)
 	if !ok {
-		c.Error(core_errors.ErrNotFound).SetMeta("no user auth info in JW token")
+		c.Error(core_errors.ErrNotFound).SetMeta("no user auth info in context")
 		return
 	}
 	userDomain, err := h.usersService.GetMyProfile(ctx, authInfo.UserID)

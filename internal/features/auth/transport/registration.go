@@ -4,12 +4,13 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	core_http_request "github.com/qandoni/debatesApp/internal/core/transport/http/request"
 	auth_contracts "github.com/qandoni/debatesApp/internal/features/auth/contracts"
 )
 
 type RegistrationRequest struct {
 	UserName string `json:"user_name"`
-	Email    string `json:"email"`
+	Email    string `json:"email" validate:"email"`
 	Password string `json:"password"`
 }
 
@@ -17,7 +18,7 @@ func (h *AuthHTTPHandler) Registrate(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	var request RegistrationRequest
-	if err := c.ShouldBindJSON(&request); err != nil {
+	if err := core_http_request.DecodeAndValidateRequest(c, &request); err != nil {
 		c.Error(err).SetMeta("failed to decode and validate HTTP request")
 		return
 	}
