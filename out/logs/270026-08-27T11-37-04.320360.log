@@ -1,9 +1,0 @@
-2026-08-27T15:37:04.320424	DEBUG	debates_app/main.go:40	initializing postgres connection pool
-2026-08-27T15:37:04.325689	DEBUG	debates_app/main.go:50	initializing transaction manager
-2026-08-27T15:37:04.325729	DEBUG	debates_app/main.go:53	initializing feature	{"feature": "users"}
-2026-08-27T15:37:04.325741	DEBUG	debates_app/main.go:58	initializing feature	{"feature": "auth"}
-2026-08-27T15:37:04.325752	DEBUG	debates_app/main.go:65	initializing HTTP server
-2026-08-27T15:37:04.325824	INFO	server/server.go:45	start HTTP server	{"addr": ":5050"}
-2026-08-27T15:37:07.252125	DEBUG	middleware/common.go:65	>>> incoming HTTP request	{"requestID": "9dc11d9a-9fee-4a86-9425-b663e9127e1c", "url": "/api/v1/users/me", "http_method": "GET", "time": "2026-08-27T11:37:07.252124"}
-2026-08-27T15:37:07.253212	DEBUG	middleware/common.go:73	<<< done HTTP request	{"requestID": "9dc11d9a-9fee-4a86-9425-b663e9127e1c", "url": "/api/v1/users/me", "status_code": 200, "latence": "1.087147ms"}
-2026-08-27T15:43:09.024711	INFO	server/server.go:57	shutdown http server...

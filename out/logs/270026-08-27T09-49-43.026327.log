@@ -1,2 +1,0 @@
-2026-08-27T13:49:43.026353	DEBUG	debates_app/main.go:40	initializing postgres connection pool
-2026-08-27T13:49:43.026980	FATAL	debates_app/main.go:46	failed to init postgres connection pool	{"error": "pgxpool ping: failed to connect to `user=user-1 database=debatesApp_db`: 127.0.0.1:5432 (localhost): dial error: dial tcp 127.0.0.1:5432: connect: connection refused"}

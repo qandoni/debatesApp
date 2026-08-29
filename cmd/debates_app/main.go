@@ -17,6 +17,8 @@ import (
 	auth_jwt "github.com/qandoni/debatesApp/internal/features/auth/jwt"
 	auth_service "github.com/qandoni/debatesApp/internal/features/auth/service"
 	auth_http_transport "github.com/qandoni/debatesApp/internal/features/auth/transport"
+	images_service "github.com/qandoni/debatesApp/internal/features/images/service"
+	"github.com/qandoni/debatesApp/internal/features/storage/minio"
 	users_repository "github.com/qandoni/debatesApp/internal/features/users/repository"
 	users_service "github.com/qandoni/debatesApp/internal/features/users/service"
 	users_http_transport "github.com/qandoni/debatesApp/internal/features/users/transport"
@@ -50,13 +52,30 @@ func main() {
 	logger.Debug("initializing transaction manager")
 	txManager := core_pgx_pool.NewTransactionManager(pool)
 
+	logger.Debug("initializing feature", zap.String("feature", "minio"))
+
+	minioConfig := minio.NewConfigMust()
+
+	storage, err := minio.NewStorage(minioConfig)
+	if err != nil {
+		fmt.Println("initialize minio storage:", err)
+	}
+
+	if err := storage.EnsureBucket(ctx); err != nil {
+		fmt.Println("ensure minio bucket:", err)
+	}
+
+	if err := storage.SetPublicReadPolicy(ctx); err != nil {
+		fmt.Println("set public read policy:", err)
+	}
 	logger.Debug("initializing feature", zap.String("feature", "users"))
+	passwordHasher := core_password.NewBcryptHasher()
 	usersRepository := users_repository.NewUsersRepository(pool, pool.OpTimeout())
-	usersService := users_service.NewUsersService(usersRepository)
-	usersHTTPTransport := users_http_transport.NewUsersHTTPHandler(usersService)
+	imagesService := images_service.NewImagesService(storage, usersRepository)
+	usersService := users_service.NewUsersService(usersRepository, passwordHasher)
+	usersHTTPTransport := users_http_transport.NewUsersHTTPHandler(usersService, imagesService)
 
 	logger.Debug("initializing feature", zap.String("feature", "auth"))
-	passwordHasher := core_password.NewBcryptHasher()
 	sha256Hasher := core_password_hash.NewSHA256Hasher()
 	jwtManager := auth_jwt.NewJWTManager("my-secret-key")
 	authService := auth_service.NewAuthService(usersRepository, passwordHasher, sha256Hasher, jwtManager, txManager)

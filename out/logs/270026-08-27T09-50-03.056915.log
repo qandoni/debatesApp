@@ -1,5 +1,0 @@
-2026-08-27T13:50:03.056953	DEBUG	debates_app/main.go:40	initializing postgres connection pool
-2026-08-27T13:50:03.061715	DEBUG	debates_app/main.go:50	initializing transaction manager
-2026-08-27T13:50:03.061753	DEBUG	debates_app/main.go:53	initializing feature	{"feature": "users"}
-2026-08-27T13:50:03.061761	DEBUG	debates_app/main.go:58	initializing feature	{"feature": "auth"}
-2026-08-27T13:50:03.061767	DEBUG	debates_app/main.go:65	initializing HTTP server

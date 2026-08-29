@@ -3,6 +3,11 @@ export
 
 export PROJECT_ROOT=${shell pwd}
 
+minio-up:
+	@docker compose up -d minio
+minio-down:
+	@docker compose down minio
+
 env-up:
 	@docker compose up -d debatesApp-postgres
 env-down:
@@ -51,6 +56,10 @@ debatesApp-run:
 	export POSTGRES_HOST=localhost && \
 	sudo go mod tidy && \
 	go run ${PROJECT_ROOT}/cmd/debates_app/main.go
+
+minio-test-run:
+	sudo go mod tidy && \
+	go run ${PROJECT_ROOT}/cmd/test_minio/main.go
 
 ps:
 	@docker compose ps

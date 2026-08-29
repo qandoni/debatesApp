@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
 	auth_contracts "github.com/qandoni/debatesApp/internal/features/auth/contracts"
 )
 
@@ -23,7 +24,7 @@ func (s *AuthService) Login(
 		input.Password,
 	)
 	if err != nil {
-		return auth_contracts.LoginOutput{}, fmt.Errorf("compare password: %w", err)
+		return auth_contracts.LoginOutput{}, fmt.Errorf("compare password: %w", core_errors.ErrUnauthorized)
 	}
 
 	accessToken, err := s.jwtManager.GenerateAccessToken(user)
