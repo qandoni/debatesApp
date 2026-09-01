@@ -9,26 +9,60 @@ import (
 
 func NewImagesService(
 	storage storage.ImageStorage,
-	usersRepository UsersRepository,
+	postsRepository PostsRepository,
+	postImagesRepository PostImagesRepository,
 ) *ImagesService {
 	return &ImagesService{
+		storage,
+		postsRepository,
+		postImagesRepository,
+	}
+}
+
+type ImagesService struct {
+	storage              storage.ImageStorage
+	postsRepository      PostsRepository
+	postImagesRepository PostImagesRepository
+}
+
+func NewAvatarService(
+	storage storage.ImageStorage,
+	usersRepository UsersRepository,
+) *AvatarService {
+	return &AvatarService{
 		storage,
 		usersRepository,
 	}
 }
 
-type ImagesService struct {
+type AvatarService struct {
 	storage         storage.ImageStorage
 	usersRepository UsersRepository
-	//TODO добавить PostImages repository
+}
+
+type PostsRepository interface {
+	GetPost(
+		ctx context.Context,
+		postID int,
+	) (domain.Post, error)
+}
+
+type PostImagesRepository interface {
+	CreatePostImage(
+		ctx context.Context,
+		image domain.PostImage,
+	) (domain.PostImage, error)
+	GetByPostID(
+		ctx context.Context,
+		postID int,
+	) ([]domain.PostImage, error)
+	DeleteByPostID(
+		ctx context.Context,
+		postID int,
+	) error
 }
 
 type UsersRepository interface {
-	GetMyProfile(
-		ctx context.Context,
-		userID int,
-	) (domain.User, error)
-
 	UpdateAvatarURL(
 		ctx context.Context,
 		userID int,
