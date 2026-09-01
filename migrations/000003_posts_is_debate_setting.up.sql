@@ -1,0 +1,3 @@
+ALTER TABLE debatesApp.posts
+ALTER COLUMN is_debate SET NOT NULL,
+ALTER COLUMN is_debate SET DEFAULT FALSE;

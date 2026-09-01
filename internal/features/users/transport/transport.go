@@ -10,14 +10,14 @@ import (
 
 type UsersHTTPHandler struct {
 	usersService  UsersService
-	imagesService ImagesService
+	avatarService AvatarService
 }
 
 type UsersService interface {
 	GetMyProfile(ctx context.Context, userID int) (domain.User, error)
 	EditProfile(ctx context.Context, userID int, profilePatch domain.UserPatch) (domain.User, error)
 }
-type ImagesService interface {
+type AvatarService interface {
 	UploadAvatar(
 		ctx context.Context,
 		userID int,
@@ -30,11 +30,11 @@ type ImagesService interface {
 
 func NewUsersHTTPHandler(
 	usersService UsersService,
-	imagesService ImagesService,
+	avatarService AvatarService,
 ) *UsersHTTPHandler {
 	return &UsersHTTPHandler{
 		usersService:  usersService,
-		imagesService: imagesService,
+		avatarService: avatarService,
 	}
 }
 

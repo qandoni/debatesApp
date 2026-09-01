@@ -53,7 +53,7 @@ func (h *UsersHTTPHandler) UploadAvatar(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	if err := h.imagesService.UploadAvatar(
+	if err := h.avatarService.UploadAvatar(
 		ctx,
 		authInfo.UserID,
 		file,
@@ -67,6 +67,7 @@ func (h *UsersHTTPHandler) UploadAvatar(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// TODO вынести в конфиг
 func extensionByContentType(contentType string) (string, bool) {
 	switch contentType {
 	case "image/jpeg":

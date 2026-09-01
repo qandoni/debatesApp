@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func (s *ImagesService) UploadAvatar(
+func (s *AvatarService) UploadAvatar(
 	ctx context.Context,
 	userID int,
 	reader io.Reader,

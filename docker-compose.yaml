@@ -34,5 +34,5 @@ services:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
     volumes:
-      - ${PROJECT_ROOT}/out/miniodata:/minio_data/data
+      - ${PROJECT_ROOT}/out/miniodata:/data
     command: server /data --console-address ":9001"

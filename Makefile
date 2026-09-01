@@ -49,7 +49,12 @@ migrate-action:
 	docker compose run --rm debatesApp-postgres-migrate \
 		-path /migrations \
 		-database postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@debatesApp-postgres:5432/${POSTGRES_DB}?sslmode=disable \
-		"$(action)"
+		$(action)
+migrate-force-dirty-cleanup:
+	docker compose run --rm debatesApp-postgres-migrate \
+		-path /migrations \
+		-database postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@debatesApp-postgres:5432/${POSTGRES_DB}?sslmode=disable \
+		force 3
 
 debatesApp-run:
 	@export LOGGER_FOLDER=${PROJECT_ROOT}/out/logs && \
