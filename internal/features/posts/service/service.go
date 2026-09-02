@@ -5,13 +5,52 @@ import (
 	"mime/multipart"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
+	core_postgres "github.com/qandoni/debatesApp/internal/core/repository/postgres"
 )
 
 type PostsService struct {
-	postsRepository PostsRepository
-	imagesService   ImagesService
-	//TODO добавить транзакции для взаимодействия с будущей фичой дебатов
+	postsRepository       PostsRepository
+	imagesService         ImagesService
+	debatesRepository     DebatesRepository
+	debateSidesRepository DebateSidesRepository
+	txManager             core_postgres.TransactionManager
 }
+
+type DebateSidesRepository interface {
+	CreateDebateSide(
+		ctx context.Context,
+		side domain.DebateSide,
+	) (domain.DebateSide, error)
+
+	GetByDebateID(
+		ctx context.Context,
+		debateID int,
+	) ([]domain.DebateSide, error)
+}
+
+type DebatesRepository interface {
+	CreateDebate(
+		ctx context.Context,
+		debate domain.Debate,
+	) (domain.Debate, error)
+
+	GetByPostID(
+		ctx context.Context,
+		postID int,
+	) (domain.Debate, error)
+
+	GetByID(
+		ctx context.Context,
+		debateID int,
+	) (domain.Debate, error)
+
+	// FinishDebate(
+	// 	ctx context.Context,
+	// 	debateID int,
+	// 	winnerSideID int,
+	// ) error
+}
+
 type PostsRepository interface {
 	CreatePost(
 		ctx context.Context,
@@ -60,9 +99,15 @@ type ImagesService interface {
 func NewPostsService(
 	postsRepository PostsRepository,
 	imagesService ImagesService,
+	debatesRepository DebatesRepository,
+	debateSidesRepository DebateSidesRepository,
+	txManager core_postgres.TransactionManager,
 ) *PostsService {
 	return &PostsService{
-		postsRepository: postsRepository,
-		imagesService:   imagesService,
+		postsRepository:       postsRepository,
+		imagesService:         imagesService,
+		debatesRepository:     debatesRepository,
+		debateSidesRepository: debateSidesRepository,
+		txManager:             txManager,
 	}
 }

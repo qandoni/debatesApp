@@ -77,6 +77,7 @@ func (s *ImagesService) CreatePostImages(
 
 }
 
+// TODO перенести общий код картинок в общий пакет
 func extensionByContentType(contentType string) (string, bool) {
 	switch contentType {
 	case "image/jpeg":

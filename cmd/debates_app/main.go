@@ -17,7 +17,12 @@ import (
 	auth_jwt "github.com/qandoni/debatesApp/internal/features/auth/jwt"
 	auth_service "github.com/qandoni/debatesApp/internal/features/auth/service"
 	auth_http_transport "github.com/qandoni/debatesApp/internal/features/auth/transport"
+	debate_votes_repository "github.com/qandoni/debatesApp/internal/features/debate_votes/repository/postgres"
+	debate_votes_service "github.com/qandoni/debatesApp/internal/features/debate_votes/service"
+	debate_votes_http_transport "github.com/qandoni/debatesApp/internal/features/debate_votes/transport"
 	images_service "github.com/qandoni/debatesApp/internal/features/images/service"
+	debates_repository "github.com/qandoni/debatesApp/internal/features/posts/debates/repository/postgres"
+	debate_sides_repository "github.com/qandoni/debatesApp/internal/features/posts/debates/repository/postgres/debate_sides/repository/postgres"
 	post_images_repository "github.com/qandoni/debatesApp/internal/features/posts/posts_images/repository/postgres"
 	posts_repository "github.com/qandoni/debatesApp/internal/features/posts/repository"
 	posts_service "github.com/qandoni/debatesApp/internal/features/posts/service"
@@ -89,9 +94,14 @@ func main() {
 	postsRepository := posts_repository.NewPostsRepository(pool, pool.OpTimeout())
 	postImagesRepository := post_images_repository.NewPostImagesRepository(pool, pool.OpTimeout())
 	imagesService := images_service.NewImagesService(storage, postsRepository, postImagesRepository)
-	postsService := posts_service.NewPostsService(postsRepository, imagesService)
+	debatesRepository := debates_repository.NewDebatesRepository(pool, pool.OpTimeout())
+	debatesSidesRepository := debate_sides_repository.NewDebateSidesRepository(pool, pool.OpTimeout())
+	postsService := posts_service.NewPostsService(postsRepository, imagesService, debatesRepository, debatesSidesRepository, txManager)
 	postsHTTPTransport := posts_http_transport.NewPostsHTTPHandler(postsService)
 	postImagesHTTPTransport := posts_http_transport.NewPostImagesHTTPHandler(imagesService)
+	debateVotesRepository := debate_votes_repository.NewDebateVotesRepository(pool, pool.OpTimeout())
+	debateVotesService := debate_votes_service.NewDebateVotesService(debateVotesRepository, debatesRepository, debatesSidesRepository)
+	debateVotesHTTPTransport := debate_votes_http_transport.NewDebateVotesHTTPTransport(debateVotesService)
 
 	logger.Debug("initializing HTTP server")
 	server := core_http_server.NewHTTPServer(
@@ -112,6 +122,7 @@ func main() {
 		usersHTTPTransport,
 		postsHTTPTransport,
 		postImagesHTTPTransport,
+		debateVotesHTTPTransport,
 		jwtManager,
 	)
 	if err := server.Run(ctx); err != nil {

@@ -3,7 +3,6 @@ package posts_repository
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
 )
@@ -27,7 +26,7 @@ func (r *PostsRepository) CreatePost(
 		post.AuthorID,
 		post.Content,
 		post.IsDebate,
-		time.Now(),
+		post.CreatedAt,
 	)
 	var postModel PostModel
 	err := row.Scan(
