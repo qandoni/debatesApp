@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	core_http_middleware "github.com/qandoni/debatesApp/internal/core/transport/http/middleware"
 	auth_http_transport "github.com/qandoni/debatesApp/internal/features/auth/transport"
+	debate_votes_http_transport "github.com/qandoni/debatesApp/internal/features/debate_votes/transport"
 	posts_http_transport "github.com/qandoni/debatesApp/internal/features/posts/transport/http"
 	users_http_transport "github.com/qandoni/debatesApp/internal/features/users/transport"
 )
@@ -14,6 +15,7 @@ func RegisterRoutes(
 	usersHandler *users_http_transport.UsersHTTPHandler,
 	postsHandler *posts_http_transport.PostsHTTPHandler,
 	postImagesHandler *posts_http_transport.PostImagesHTTPHandler,
+	debateVotesHandler *debate_votes_http_transport.DebateVotesHTTPHandler,
 	parser core_http_middleware.TokenParser,
 ) {
 	jwt := core_http_middleware.JWT(parser)
@@ -29,4 +31,5 @@ func RegisterRoutes(
 	posts.Use(jwt)
 	postsHandler.Register(posts)
 	postImagesHandler.Register(posts)
+	debateVotesHandler.Register(posts)
 }

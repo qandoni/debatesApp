@@ -35,7 +35,12 @@ func (s *PostsService) GetPosts(
 			return []domain.Post{}, fmt.Errorf("get images for post with id: '%d': %w", posts[i].ID, err)
 		}
 		posts[i].Images = images
+		debate, err := s.debatesRepository.GetByPostID(ctx, posts[i].ID)
+		sides, err := s.debateSidesRepository.GetByDebateID(ctx, debate.ID)
+		debate.Sides = sides
+		posts[i].Debate = &debate
 	}
+
 	// TODO передалать цикл для производительности под GetByPostIDs(
 	//     ctx context.Context,
 	//     postIDs []int,

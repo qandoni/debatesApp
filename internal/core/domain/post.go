@@ -19,6 +19,7 @@ func NewPost(
 		content,
 		isDebate,
 		nil,
+		nil,
 		createdAt,
 		updatedAt,
 		deletedAt,
@@ -32,6 +33,7 @@ type Post struct {
 	Content   string
 	IsDebate  bool
 	Images    []PostImage
+	Debate    *Debate
 	CreatedAt time.Time
 	UpdatedAt *time.Time
 	DeletedAt *time.Time

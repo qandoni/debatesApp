@@ -13,6 +13,7 @@ type PostDTOResponse struct {
 	Content   string
 	IsDebate  bool
 	Images    []domain.PostImage
+	Debate    *domain.Debate
 	CreatedAt time.Time
 	UpdatedAt *time.Time
 	DeletedAt *time.Time
@@ -26,6 +27,7 @@ func postDTOFromDomain(post domain.Post) PostDTOResponse {
 		Content:   post.Content,
 		IsDebate:  post.IsDebate,
 		Images:    post.Images,
+		Debate:    post.Debate,
 		CreatedAt: post.CreatedAt,
 		UpdatedAt: post.UpdatedAt,
 		DeletedAt: post.DeletedAt,

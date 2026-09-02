@@ -24,14 +24,13 @@ CREATE TABLE debatesApp.posts(
 );
 
 CREATE TABLE debatesApp.debates(
-    id              SERIAL                  PRIMARY KEY,
-    version         INT         NOT NULL    DEFAULT 1,
-    post_id         INT         NOT NULL    REFERENCES debatesApp.posts(id),
-    status          TEXT        NOT NULL    CHECK(status IN(
-        'open',
-        'completed'
+    id              SERIAL                         PRIMARY KEY,
+    post_id         INT         NOT NULL UNIQUE    REFERENCES debatesApp.posts(id),
+    status          TEXT        NOT NULL           CHECK(status IN(
+        'OPEN',
+        'FINISHED'
     )),
-    end_at          TIMESTAMPTZ NOT NULL,
+    end_at          TIMESTAMPTZ,
     created_at      TIMESTAMPTZ NOT NULL    DEFAULT NOW(),
     finished_at     TIMESTAMPTZ
 );
@@ -48,12 +47,12 @@ CREATE TABLE debatesApp.debate_sides(
 CREATE TABLE debatesApp.debate_votes(
     id              SERIAL      NOT NULL PRIMARY KEY,
     version         INT         NOT NULL DEFAULT 1,
-    debate_id       INT         NOT NULL REFERENCES debatesApp.debates(id),
-    user_id         INT         NOT NULL REFERENCES debatesApp.users(id),
+    debate_id       INT         NOT NULL UNIQUE REFERENCES debatesApp.debates(id),
+    user_id         INT         NOT NULL UNIQUE REFERENCES debatesApp.users(id),
     debate_side_id  INT         NOT NULL REFERENCES debatesApp.debate_sides(id),
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ,
-    is_changed      BOOLEAN
+    is_changed      BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 CREATE TABLE debatesApp.post_images(
