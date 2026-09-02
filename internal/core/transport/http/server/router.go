@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	core_http_middleware "github.com/qandoni/debatesApp/internal/core/transport/http/middleware"
 	auth_http_transport "github.com/qandoni/debatesApp/internal/features/auth/transport"
-	debate_votes_http_transport "github.com/qandoni/debatesApp/internal/features/debate_votes/transport"
+	debate_votes_http_transport "github.com/qandoni/debatesApp/internal/features/posts/debate_votes/transport"
 	posts_http_transport "github.com/qandoni/debatesApp/internal/features/posts/transport/http"
 	users_http_transport "github.com/qandoni/debatesApp/internal/features/users/transport"
 )
