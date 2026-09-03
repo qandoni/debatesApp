@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
+	debate_votes_contracts "github.com/qandoni/debatesApp/internal/features/posts/debate_votes/contracts"
 )
 
 func NewDebateVotesService(
@@ -26,6 +27,15 @@ type DebateVotesService struct {
 
 type DebatesRepository interface {
 	GetByID(ctx context.Context, debateID int) (domain.Debate, error)
+	FinishDebate(
+		ctx context.Context,
+		debateID int,
+		winnerSideID *int,
+	) error
+	GetAuthorID(
+		ctx context.Context,
+		debateID int,
+	) (int, error)
 }
 
 type DebateSidesRepository interface {
@@ -42,4 +52,5 @@ type DebateVotesRepository interface {
 	) (domain.DebateVote, error)
 
 	Update(ctx context.Context, vote domain.DebateVote) (domain.DebateVote, error)
+	GetResults(ctx context.Context, debateID int) ([]debate_votes_contracts.DebateVoteResult, error)
 }

@@ -43,12 +43,6 @@ type DebatesRepository interface {
 		ctx context.Context,
 		debateID int,
 	) (domain.Debate, error)
-
-	// FinishDebate(
-	// 	ctx context.Context,
-	// 	debateID int,
-	// 	winnerSideID int,
-	// ) error
 }
 
 type PostsRepository interface {

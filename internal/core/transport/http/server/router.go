@@ -31,5 +31,7 @@ func RegisterRoutes(
 	posts.Use(jwt)
 	postsHandler.Register(posts)
 	postImagesHandler.Register(posts)
-	debateVotesHandler.Register(posts)
+	debates := api.Group("/debates")
+	debates.Use(jwt)
+	debateVotesHandler.Register(debates)
 }

@@ -10,6 +10,7 @@ import (
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
 )
 
+// TODO Пользователь может изменить свой голос в дебате только до того, как опубликует свой первый аргумент/комментарий. После добавления фичи аргументов нужно доделать этот метод
 func (s *DebateVotesService) ChangeVote(
 	ctx context.Context,
 	userID int,
