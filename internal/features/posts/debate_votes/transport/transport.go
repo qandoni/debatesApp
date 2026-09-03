@@ -22,6 +22,15 @@ type DebateVotesHTTPHandler struct {
 type DebateVotesService interface {
 	Vote(ctx context.Context, userID int, debateID int, debateSideID int) (domain.DebateVote, error)
 	ChangeVote(ctx context.Context, userID int, debateID int, debateSideID int) (domain.DebateVote, error)
+	CalculateWinner(
+		ctx context.Context,
+		debateID int,
+	) (*int, error)
+	FinishDebate(
+		ctx context.Context,
+		userID int,
+		debateID int,
+	) error
 }
 
 type VoteRequest struct {
@@ -31,4 +40,5 @@ type VoteRequest struct {
 func (h *DebateVotesHTTPHandler) Register(rg *gin.RouterGroup) {
 	rg.POST("/:id/vote", h.Vote)
 	rg.PATCH("/:id/vote", h.ChangeVote)
+	rg.POST("/:id/finish", h.FinishDebate)
 }
