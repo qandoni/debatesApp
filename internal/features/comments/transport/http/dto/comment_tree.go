@@ -1,11 +1,14 @@
 package comments_dto
 
+import "github.com/qandoni/debatesApp/internal/core/domain"
+
 func BuildCommentTree(
-	comments []CommentDTOResponse,
+	comments []domain.Comment,
 ) []CommentDTOResponse {
 	commentsByID := make(map[int]*CommentDTOResponse, len(comments))
 	for _, comment := range comments {
-		commentsByID[comment.ID] = &comment
+		dto := NewCommentDTOFromDomain(comment)
+		commentsByID[comment.ID] = &dto
 	}
 
 	roots := make([]CommentDTOResponse, 0)
