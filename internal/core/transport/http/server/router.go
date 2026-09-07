@@ -38,4 +38,10 @@ func RegisterRoutes(
 	debates.Use(jwt)
 	debateVotesHandler.Register(debates)
 
+	comments := api.Group("/comments")
+	comments.Use(jwt)
+
+	{
+		comments.PATCH("/:id", commentsHandler.UpdateComment)
+	}
 }

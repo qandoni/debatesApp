@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
-	comments_dto "github.com/qandoni/debatesApp/internal/features/comments/transport/http/dto"
 )
 
 func (s *CommentsService) GetByPostID(
@@ -13,7 +13,7 @@ func (s *CommentsService) GetByPostID(
 	postID int,
 	limit *int,
 	offset *int,
-) ([]comments_dto.CommentDTOResponse, error) {
+) ([]domain.Comment, error) {
 	if limit != nil && *limit < 0 {
 		return nil, fmt.Errorf(
 			"limit must be non-negative: %w",
@@ -36,5 +36,5 @@ func (s *CommentsService) GetByPostID(
 	if err != nil {
 		return nil, fmt.Errorf("get comments: %w", err)
 	}
-	return comments_dto.BuildCommentTree(comments), nil
+	return comments, nil
 }

@@ -55,5 +55,4 @@ func (h *CommentsHTTPHandler) Register(rg *gin.RouterGroup) {
 	rg.POST("/:id/comments", h.CreateComment)
 	rg.GET("/:id/comments", h.GetComments)
 	rg.POST("/:id/arguments", h.CreateArgument)
-	rg.PATCH("/:id", h.UpdateComment)
 }

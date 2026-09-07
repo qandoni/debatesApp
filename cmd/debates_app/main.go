@@ -19,6 +19,7 @@ import (
 	auth_http_transport "github.com/qandoni/debatesApp/internal/features/auth/transport"
 	comments_repository "github.com/qandoni/debatesApp/internal/features/comments/repository/postgres"
 	comments_service "github.com/qandoni/debatesApp/internal/features/comments/service"
+	comments_transport_http "github.com/qandoni/debatesApp/internal/features/comments/transport/http"
 	images_service "github.com/qandoni/debatesApp/internal/features/images/service"
 	debate_sides_repository "github.com/qandoni/debatesApp/internal/features/posts/debate_sides/repository/postgres"
 	debate_votes_repository "github.com/qandoni/debatesApp/internal/features/posts/debate_votes/repository/postgres"
@@ -101,10 +102,11 @@ func main() {
 	postsService := posts_service.NewPostsService(postsRepository, imagesService, debatesRepository, debatesSidesRepository, txManager)
 	postsHTTPTransport := posts_http_transport.NewPostsHTTPHandler(postsService)
 	postImagesHTTPTransport := posts_http_transport.NewPostImagesHTTPHandler(imagesService)
-	commentsRepository := comments_repository.NewCommentsRepository(pool, pool.OpTimeout())
 	debateVotesRepository := debate_votes_repository.NewDebateVotesRepository(pool, pool.OpTimeout())
+	commentsRepository := comments_repository.NewCommentsRepository(pool, pool.OpTimeout())
 	commentsService := comments_service.NewCommentsService(commentsRepository, postsRepository, debatesRepository, debatesSidesRepository, debateVotesRepository)
-	debateVotesService := debate_votes_service.NewDebateVotesService(debateVotesRepository, debatesRepository, debatesSidesRepository)
+	commentsHTTPTransport := comments_transport_http.NewCommentsHTTPHandler(commentsService)
+	debateVotesService := debate_votes_service.NewDebateVotesService(debateVotesRepository, debatesRepository, debatesSidesRepository, commentsRepository)
 	debateVotesHTTPTransport := debate_votes_http_transport.NewDebateVotesHTTPTransport(debateVotesService)
 
 	logger.Debug("initializing HTTP server")
@@ -127,6 +129,7 @@ func main() {
 		postsHTTPTransport,
 		postImagesHTTPTransport,
 		debateVotesHTTPTransport,
+		commentsHTTPTransport,
 		jwtManager,
 	)
 	if err := server.Run(ctx); err != nil {
