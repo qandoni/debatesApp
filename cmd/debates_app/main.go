@@ -17,6 +17,8 @@ import (
 	auth_jwt "github.com/qandoni/debatesApp/internal/features/auth/jwt"
 	auth_service "github.com/qandoni/debatesApp/internal/features/auth/service"
 	auth_http_transport "github.com/qandoni/debatesApp/internal/features/auth/transport"
+	comments_repository "github.com/qandoni/debatesApp/internal/features/comments/repository/postgres"
+	comments_service "github.com/qandoni/debatesApp/internal/features/comments/service"
 	images_service "github.com/qandoni/debatesApp/internal/features/images/service"
 	debate_sides_repository "github.com/qandoni/debatesApp/internal/features/posts/debate_sides/repository/postgres"
 	debate_votes_repository "github.com/qandoni/debatesApp/internal/features/posts/debate_votes/repository/postgres"
@@ -99,7 +101,9 @@ func main() {
 	postsService := posts_service.NewPostsService(postsRepository, imagesService, debatesRepository, debatesSidesRepository, txManager)
 	postsHTTPTransport := posts_http_transport.NewPostsHTTPHandler(postsService)
 	postImagesHTTPTransport := posts_http_transport.NewPostImagesHTTPHandler(imagesService)
+	commentsRepository := comments_repository.NewCommentsRepository(pool, pool.OpTimeout())
 	debateVotesRepository := debate_votes_repository.NewDebateVotesRepository(pool, pool.OpTimeout())
+	commentsService := comments_service.NewCommentsService(commentsRepository, postsRepository, debatesRepository, debatesSidesRepository, debateVotesRepository)
 	debateVotesService := debate_votes_service.NewDebateVotesService(debateVotesRepository, debatesRepository, debatesSidesRepository)
 	debateVotesHTTPTransport := debate_votes_http_transport.NewDebateVotesHTTPTransport(debateVotesService)
 

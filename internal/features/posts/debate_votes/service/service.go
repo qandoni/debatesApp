@@ -11,11 +11,13 @@ func NewDebateVotesService(
 	debateVotesRepository DebateVotesRepository,
 	debatesRepository DebatesRepository,
 	debateSidesRepository DebateSidesRepository,
+	commentsRepository CommentsRepository,
 ) *DebateVotesService {
 	return &DebateVotesService{
 		debateVotesRepository,
 		debatesRepository,
 		debateSidesRepository,
+		commentsRepository,
 	}
 }
 
@@ -23,6 +25,15 @@ type DebateVotesService struct {
 	debateVotesRepository DebateVotesRepository
 	debatesRepository     DebatesRepository
 	debateSidesRepository DebateSidesRepository
+	commentsRepository    CommentsRepository
+}
+
+type CommentsRepository interface {
+	HasUserArgumentInPost(
+		ctx context.Context,
+		userID int,
+		postID int,
+	) (bool, error)
 }
 
 type DebatesRepository interface {
