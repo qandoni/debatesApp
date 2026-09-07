@@ -70,17 +70,18 @@ CREATE TABLE debatesApp.comments(
     parent_comment_id   INT                        REFERENCES debatesApp.comments(id),
     author_id           INT         NOT NULL       REFERENCES debatesApp.users(id),
     debate_side_id      INT                        REFERENCES debatesApp.debate_sides(id),
-    content             TEXT,
+    content             TEXT NOT NULL,
     created_at          TIMESTAMPTZ NOT NULL       DEFAULT NOW(),
     updated_at          TIMESTAMPTZ
 );
 
 CREATE TABLE debatesApp.comment_ratings(
-    id                  SERIAL      NOT NULL        PRIMARY KEY,
-    version             INT         NOT NULL        DEFAULT 1,
-    comment_id          INT         NOT NULL UNIQUE REFERENCES debatesApp.comments(id),
-    user_id             INT         NOT NULL UNIQUE REFERENCES debatesApp.users(id),
-    score               INT,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at          TIMESTAMPTZ
+    id          SERIAL          NOT NULL PRIMARY KEY,
+    version     INT             NOT NULL DEFAULT 1,
+    comment_id  INT             NOT NULL REFERENCES      debatesApp.comments(id),
+    user_id     INT             NOT NULL REFERENCES      debatesApp.users(id),
+    score       INT             NOT NULL,
+    created_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ,
+    UNIQUE (comment_id, user_id)
 );
