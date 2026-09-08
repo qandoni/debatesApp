@@ -29,7 +29,7 @@ func (s *CommentsService) CreateArgument(
 		return domain.Comment{}, fmt.Errorf("get debate: %w", err)
 	}
 	if debate.Status != core_enum.DebateStatusOpen {
-		return domain.Comment{}, core_errors.ErrConflict
+		return domain.Comment{}, fmt.Errorf("debates are closed: %w", core_errors.ErrConflict)
 	}
 	sides, err := s.debateSidesRepository.GetByDebateID(ctx, debate.ID)
 	if err != nil {
@@ -56,7 +56,7 @@ func (s *CommentsService) CreateArgument(
 		return domain.Comment{}, fmt.Errorf("get user vote: %w", err)
 	}
 	if vote.DebateSideID != debateSideID {
-		return domain.Comment{}, core_errors.ErrConflict
+		return domain.Comment{}, fmt.Errorf("user voted for other side: '%d': %w", vote.DebateSideID, core_errors.ErrConflict)
 	}
 
 	argument := domain.NewCommentUninitialized(

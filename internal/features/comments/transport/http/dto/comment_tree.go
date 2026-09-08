@@ -5,25 +5,66 @@ import "github.com/qandoni/debatesApp/internal/core/domain"
 func BuildCommentTree(
 	comments []domain.Comment,
 ) []CommentDTOResponse {
-	commentsByID := make(map[int]*CommentDTOResponse, len(comments))
-	for _, comment := range comments {
-		dto := NewCommentDTOFromDomain(comment)
-		commentsByID[comment.ID] = &dto
+
+	type commentNode struct {
+		dto      CommentDTOResponse
+		children []*commentNode
 	}
 
-	roots := make([]CommentDTOResponse, 0)
+	nodes := make(map[int]*commentNode, len(comments))
+
 	for _, comment := range comments {
-		current := commentsByID[comment.ID]
+		dto := NewCommentDTOFromDomain(comment)
+
+		nodes[comment.ID] = &commentNode{
+			dto:      dto,
+			children: make([]*commentNode, 0),
+		}
+	}
+
+	roots := make([]*commentNode, 0)
+
+	for _, comment := range comments {
+		node := nodes[comment.ID]
 
 		if comment.ParentCommentID == nil {
-			roots = append(roots, *current)
+			roots = append(roots, node)
 			continue
 		}
-		parent, exists := commentsByID[*comment.ParentCommentID]
+
+		parent, exists := nodes[*comment.ParentCommentID]
 		if !exists {
 			continue
 		}
-		parent.Replies = append(parent.Replies, *current)
+
+		parent.children = append(parent.children, node)
 	}
-	return roots
+
+	var buildDTO func(node *commentNode) CommentDTOResponse
+
+	buildDTO = func(node *commentNode) CommentDTOResponse {
+		dto := node.dto
+
+		dto.Replies = make([]CommentDTOResponse, 0, len(node.children))
+
+		for _, child := range node.children {
+			dto.Replies = append(
+				dto.Replies,
+				buildDTO(child),
+			)
+		}
+
+		return dto
+	}
+
+	response := make([]CommentDTOResponse, 0, len(roots))
+
+	for _, root := range roots {
+		response = append(
+			response,
+			buildDTO(root),
+		)
+	}
+
+	return response
 }

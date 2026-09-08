@@ -57,7 +57,7 @@ func (r *CommentsRepository) CreateComment(
 		&result.UpdatedAt,
 	)
 	if err != nil {
-		return domain.Comment{}, fmt.Errorf("inser and scan comment: %w", err)
+		return domain.Comment{}, fmt.Errorf("insert and scan comment: %w", err)
 	}
 	return result, nil
 }

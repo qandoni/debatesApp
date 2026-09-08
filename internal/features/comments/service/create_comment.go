@@ -29,7 +29,7 @@ func (s *CommentsService) CreateComment(
 	if parentCommentID == nil {
 		_, err := s.debatesRepository.GetByPostID(ctx, postID)
 		if err == nil {
-			return domain.Comment{}, core_errors.ErrConflict
+			return domain.Comment{}, fmt.Errorf("this post is a debate and need a parent comment id to work: %w", core_errors.ErrConflict)
 		}
 
 		if !errors.Is(err, core_errors.ErrNotFound) {
@@ -53,7 +53,7 @@ func (s *CommentsService) CreateComment(
 		}
 
 		if parentComment.PostID != postID {
-			return domain.Comment{}, core_errors.ErrConflict
+			return domain.Comment{}, fmt.Errorf("parent comment post id != postID: %w", core_errors.ErrConflict)
 		}
 
 		debateSideID = parentComment.DebateSideID

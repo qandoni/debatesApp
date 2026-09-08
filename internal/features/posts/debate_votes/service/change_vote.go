@@ -18,8 +18,9 @@ func (s *DebateVotesService) ChangeVote(
 	debateSideID int,
 ) (domain.DebateVote, error) {
 
-	if _, err := s.getOpenDebate(ctx, debateID); err != nil {
-		return domain.DebateVote{}, err
+	debate, err := s.getOpenDebate(ctx, debateID)
+	if err != nil {
+		return domain.DebateVote{}, fmt.Errorf("get open debate: %w", err)
 	}
 
 	if err := s.validateDebateSide(ctx, debateID, debateSideID); err != nil {
@@ -31,6 +32,7 @@ func (s *DebateVotesService) ChangeVote(
 		debateID,
 		userID,
 	)
+
 	if err != nil {
 		if errors.Is(err, core_errors.ErrNotFound) {
 			return domain.DebateVote{}, fmt.Errorf(
@@ -50,6 +52,19 @@ func (s *DebateVotesService) ChangeVote(
 	if vote.IsChanged {
 		return domain.DebateVote{}, fmt.Errorf(
 			"user id='%d' has already changed vote in debate id='%d': %w",
+			userID,
+			debateID,
+			core_errors.ErrAccessForbidden,
+		)
+	}
+
+	hasArgument, err := s.commentsRepository.HasUserArgumentInPost(ctx, userID, debate.PostID)
+	if err != nil {
+		return domain.DebateVote{}, fmt.Errorf("failed to check if user have argument in this post already: %w", err)
+	}
+	if hasArgument {
+		return domain.DebateVote{}, fmt.Errorf(
+			"user id='%d' cannot change vote after creating an argument in debate id='%d': %w",
 			userID,
 			debateID,
 			core_errors.ErrAccessForbidden,

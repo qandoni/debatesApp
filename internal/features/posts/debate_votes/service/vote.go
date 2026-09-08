@@ -45,27 +45,7 @@ func (s *DebateVotesService) Vote(
 			err,
 		)
 	}
-	post, err := s.debatesRepository.GetByID(ctx, debateID)
-	if err != nil {
-		return domain.DebateVote{}, fmt.Errorf("can't find post")
-	}
-	hasArgument, err := s.commentsRepository.HasUserArgumentInPost(
-		ctx,
-		userID,
-		post.PostID,
-	)
-	if err != nil {
-		return domain.DebateVote{}, fmt.Errorf(
-			"check user argument: %w",
-			err,
-		)
-	}
 
-	if !hasArgument {
-		return domain.DebateVote{}, fmt.Errorf(
-			"user must write an argument before voting",
-		)
-	}
 	vote := domain.NewDebateVote(
 		0,
 		1,
