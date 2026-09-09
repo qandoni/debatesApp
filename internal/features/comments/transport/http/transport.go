@@ -49,10 +49,23 @@ type CommentsService interface {
 		commentID int,
 		content string,
 	) (domain.Comment, error)
+	GetArgumentsWithReplies(
+		ctx context.Context,
+		postID int,
+		limit *int,
+		offset *int,
+	) ([]domain.CommentWithRating, []domain.Comment, error)
+	SetAuthorLike(
+		ctx context.Context,
+		userID int,
+		commentID int,
+		liked bool,
+	) (domain.Comment, error)
 }
 
 func (h *CommentsHTTPHandler) Register(rg *gin.RouterGroup) {
 	rg.POST("/:id/comments", h.CreateComment)
 	rg.GET("/:id/comments", h.GetComments)
 	rg.POST("/:id/arguments", h.CreateArgument)
+	rg.GET("/:id/arguments", h.GetArguments)
 }

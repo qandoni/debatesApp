@@ -17,6 +17,9 @@ import (
 	auth_jwt "github.com/qandoni/debatesApp/internal/features/auth/jwt"
 	auth_service "github.com/qandoni/debatesApp/internal/features/auth/service"
 	auth_http_transport "github.com/qandoni/debatesApp/internal/features/auth/transport"
+	comments_ratings_repository "github.com/qandoni/debatesApp/internal/features/comments/comment_ratings/repository/postgres"
+	comment_ratings_service "github.com/qandoni/debatesApp/internal/features/comments/comment_ratings/service"
+	comment_ratings_http_transport "github.com/qandoni/debatesApp/internal/features/comments/comment_ratings/transport/http"
 	comments_repository "github.com/qandoni/debatesApp/internal/features/comments/repository/postgres"
 	comments_service "github.com/qandoni/debatesApp/internal/features/comments/service"
 	comments_transport_http "github.com/qandoni/debatesApp/internal/features/comments/transport/http"
@@ -108,6 +111,9 @@ func main() {
 	commentsHTTPTransport := comments_transport_http.NewCommentsHTTPHandler(commentsService)
 	debateVotesService := debate_votes_service.NewDebateVotesService(debateVotesRepository, debatesRepository, debatesSidesRepository, commentsRepository)
 	debateVotesHTTPTransport := debate_votes_http_transport.NewDebateVotesHTTPTransport(debateVotesService)
+	commentRatingsRepository := comments_ratings_repository.NewCommentRatingsRepository(pool, pool.OpTimeout())
+	commentRatingsService := comment_ratings_service.NewCommentRatingsService(commentRatingsRepository, commentsRepository, debatesRepository)
+	commentRatingsHTTPHandler := comment_ratings_http_transport.NewCommentRatingsHTTPHandler(commentRatingsService)
 
 	logger.Debug("initializing HTTP server")
 	server := core_http_server.NewHTTPServer(
@@ -130,6 +136,7 @@ func main() {
 		postImagesHTTPTransport,
 		debateVotesHTTPTransport,
 		commentsHTTPTransport,
+		commentRatingsHTTPHandler,
 		jwtManager,
 	)
 	if err := server.Run(ctx); err != nil {

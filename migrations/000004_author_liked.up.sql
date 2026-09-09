@@ -1,0 +1,2 @@
+ALTER TABLE debatesApp.comments
+ADD COLUMN author_liked BOOLEAN NOT NULL DEFAULT FALSE;
