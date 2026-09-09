@@ -110,6 +110,21 @@ type PostsRepository interface {
 }
 
 type CommentsRepository interface {
+	SetAuthorLike(
+		ctx context.Context,
+		commentID int,
+		liked bool,
+	) (domain.Comment, error)
+	GetByPostIDWithoutPagination(
+		ctx context.Context,
+		postID int,
+	) ([]domain.Comment, error)
+	GetArgumentsWithReplies(
+		ctx context.Context,
+		postID int,
+		limit *int,
+		offset *int,
+	) ([]domain.CommentWithRating, error)
 	UpdateComment(
 		ctx context.Context,
 		comment domain.Comment,

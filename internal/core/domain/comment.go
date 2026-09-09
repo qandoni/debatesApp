@@ -22,6 +22,7 @@ func NewComment(
 		parentCommentID,
 		authorID,
 		debateSideID,
+		false,
 		content,
 		createdAt,
 		updatedAt,
@@ -55,6 +56,7 @@ type Comment struct {
 	ParentCommentID *int
 	AuthorID        int
 	DebateSideID    *int
+	AuthorLiked     bool
 	Content         string
 	CreatedAt       time.Time
 	UpdatedAt       *time.Time

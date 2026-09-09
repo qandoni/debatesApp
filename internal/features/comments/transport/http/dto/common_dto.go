@@ -13,8 +13,11 @@ type CommentDTOResponse struct {
 	AuthorID        int                  `json:"author_id"`
 	DebateSideID    *int                 `json:"debate_side_id"`
 	Content         string               `json:"content"`
+	AuthorLiked     bool                 `json:"author_liked"`
 	CreatedAt       time.Time            `json:"created_at"`
 	UpdatedAt       *time.Time           `json:"updated_at"`
+	AverageRating   float64              `json:"average_rating"`
+	RatingsCount    int                  `json:"ratings_count"`
 	Replies         []CommentDTOResponse `json:"replies"`
 }
 
@@ -26,6 +29,7 @@ func NewCommentDTOFromDomain(comment domain.Comment) CommentDTOResponse {
 		AuthorID:        comment.AuthorID,
 		DebateSideID:    comment.DebateSideID,
 		Content:         comment.Content,
+		AuthorLiked:     comment.AuthorLiked,
 		CreatedAt:       comment.CreatedAt,
 		UpdatedAt:       comment.UpdatedAt,
 		Replies:         make([]CommentDTOResponse, 0),
