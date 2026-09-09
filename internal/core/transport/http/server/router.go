@@ -8,6 +8,7 @@ import (
 	comments_transport_http "github.com/qandoni/debatesApp/internal/features/comments/transport/http"
 	debate_votes_http_transport "github.com/qandoni/debatesApp/internal/features/posts/debate_votes/transport"
 	posts_http_transport "github.com/qandoni/debatesApp/internal/features/posts/transport/http"
+	statistics_http_transport "github.com/qandoni/debatesApp/internal/features/statistics/transport/http"
 	users_http_transport "github.com/qandoni/debatesApp/internal/features/users/transport"
 )
 
@@ -20,6 +21,7 @@ func RegisterRoutes(
 	debateVotesHandler *debate_votes_http_transport.DebateVotesHTTPHandler,
 	commentsHandler *comments_transport_http.CommentsHTTPHandler,
 	commentRatingsHandler *comment_ratings_http_transport.CommentRatingsHTTPHandler,
+	statisticsHandler *statistics_http_transport.StatisticsHTTPHandler,
 	parser core_http_middleware.TokenParser,
 ) {
 	jwt := core_http_middleware.JWT(parser)
@@ -48,5 +50,7 @@ func RegisterRoutes(
 		comments.PATCH("/:id/author-like", commentsHandler.SetAuthorLike)
 	}
 	commentRatingsHandler.Register(comments)
+
+	statisticsHandler.Register(debates)
 
 }
