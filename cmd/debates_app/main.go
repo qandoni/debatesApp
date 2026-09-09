@@ -33,6 +33,9 @@ import (
 	posts_repository "github.com/qandoni/debatesApp/internal/features/posts/repository"
 	posts_service "github.com/qandoni/debatesApp/internal/features/posts/service"
 	posts_http_transport "github.com/qandoni/debatesApp/internal/features/posts/transport/http"
+	statistics_repository "github.com/qandoni/debatesApp/internal/features/statistics/repository/postgres"
+	statistics_service "github.com/qandoni/debatesApp/internal/features/statistics/service"
+	statistics_http_transport "github.com/qandoni/debatesApp/internal/features/statistics/transport/http"
 	"github.com/qandoni/debatesApp/internal/features/storage/minio"
 	users_repository "github.com/qandoni/debatesApp/internal/features/users/repository"
 	users_service "github.com/qandoni/debatesApp/internal/features/users/service"
@@ -114,6 +117,9 @@ func main() {
 	commentRatingsRepository := comments_ratings_repository.NewCommentRatingsRepository(pool, pool.OpTimeout())
 	commentRatingsService := comment_ratings_service.NewCommentRatingsService(commentRatingsRepository, commentsRepository, debatesRepository)
 	commentRatingsHTTPHandler := comment_ratings_http_transport.NewCommentRatingsHTTPHandler(commentRatingsService)
+	statisticsRepository := statistics_repository.NewDebateStatisticsRepository(pool, pool.OpTimeout())
+	statisticsService := statistics_service.NewStatisticsService(statisticsRepository, debatesRepository)
+	statisticsHTTPHandler := statistics_http_transport.NewStatisticsHTTPHandler(statisticsService)
 
 	logger.Debug("initializing HTTP server")
 	server := core_http_server.NewHTTPServer(
@@ -137,6 +143,7 @@ func main() {
 		debateVotesHTTPTransport,
 		commentsHTTPTransport,
 		commentRatingsHTTPHandler,
+		statisticsHTTPHandler,
 		jwtManager,
 	)
 	if err := server.Run(ctx); err != nil {
