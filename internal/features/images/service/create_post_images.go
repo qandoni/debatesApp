@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	core_config "github.com/qandoni/debatesApp/internal/core/config"
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
 )
@@ -38,7 +39,7 @@ func (s *ImagesService) CreatePostImages(
 			return []domain.PostImage{}, fmt.Errorf("read buffer: %w", err)
 		}
 		contentType := http.DetectContentType(buffer[:n])
-		extension, ok := extensionByContentType(contentType)
+		extension, ok := core_config.ExtensionByContentType(contentType)
 		if !ok {
 			return []domain.PostImage{}, core_errors.ErrUnsupportedMediaType
 		}
@@ -75,18 +76,4 @@ func (s *ImagesService) CreatePostImages(
 	}
 	return images, nil
 
-}
-
-// TODO перенести общий код картинок в общий пакет
-func extensionByContentType(contentType string) (string, bool) {
-	switch contentType {
-	case "image/jpeg":
-		return ".jpg", true
-	case "image/png":
-		return ".png", true
-	case "image/webp":
-		return ".webp", true
-	default:
-		return "", false
-	}
 }

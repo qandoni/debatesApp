@@ -15,9 +15,14 @@ func (r *PostImagesRepository) GetByPostID(
 	defer cancel()
 
 	query := `
-	SELECT *
-	FROM debatesApp.post_images
-	WHERE post_id=$1
+	SELECT
+		id,
+		post_id,
+		image_url,
+		display_order,
+		created_at
+	FROM debatesapp.post_images
+	WHERE post_id = $1
 	ORDER BY display_order
 	`
 

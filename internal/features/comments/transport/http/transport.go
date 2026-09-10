@@ -68,4 +68,6 @@ func (h *CommentsHTTPHandler) Register(rg *gin.RouterGroup) {
 	rg.GET("/:id/comments", h.GetComments)
 	rg.POST("/:id/arguments", h.CreateArgument)
 	rg.GET("/:id/arguments", h.GetArguments)
+	rg.PATCH("/:id", h.UpdateComment)
+	rg.PATCH("/:id/author-like", h.SetAuthorLike)
 }

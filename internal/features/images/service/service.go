@@ -60,6 +60,10 @@ type PostImagesRepository interface {
 		ctx context.Context,
 		postID int,
 	) error
+	GetByPostIDs(
+		ctx context.Context,
+		postIDs []int,
+	) (map[int][]domain.PostImage, error)
 }
 
 type UsersRepository interface {
@@ -68,4 +72,8 @@ type UsersRepository interface {
 		userID int,
 		avatarURL string,
 	) error
+	GetAvatarURL(
+		ctx context.Context,
+		userID int,
+	) (*string, error)
 }

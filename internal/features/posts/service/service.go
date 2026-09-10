@@ -88,6 +88,10 @@ type ImagesService interface {
 		userID int,
 		postID int,
 	) error
+	GetByPostIDs(
+		ctx context.Context,
+		postIDs []int,
+	) (map[int][]domain.PostImage, error)
 }
 
 func NewPostsService(

@@ -1,27 +1,24 @@
-package core_http_server //TODO либо тут хранить руты к методам, либо сделать как то организованнее и понятнее
+package core_http_server
 
 import (
 	"github.com/gin-gonic/gin"
 	core_http_middleware "github.com/qandoni/debatesApp/internal/core/transport/http/middleware"
-	auth_http_transport "github.com/qandoni/debatesApp/internal/features/auth/transport"
-	comment_ratings_http_transport "github.com/qandoni/debatesApp/internal/features/comments/comment_ratings/transport/http"
-	comments_transport_http "github.com/qandoni/debatesApp/internal/features/comments/transport/http"
-	debate_votes_http_transport "github.com/qandoni/debatesApp/internal/features/posts/debate_votes/transport"
-	posts_http_transport "github.com/qandoni/debatesApp/internal/features/posts/transport/http"
-	statistics_http_transport "github.com/qandoni/debatesApp/internal/features/statistics/transport/http"
-	users_http_transport "github.com/qandoni/debatesApp/internal/features/users/transport"
 )
+
+type RouterRegistrar interface {
+	Register(router *gin.RouterGroup)
+}
 
 func RegisterRoutes(
 	engine *gin.Engine,
-	authHandler *auth_http_transport.AuthHTTPHandler,
-	usersHandler *users_http_transport.UsersHTTPHandler,
-	postsHandler *posts_http_transport.PostsHTTPHandler,
-	postImagesHandler *posts_http_transport.PostImagesHTTPHandler,
-	debateVotesHandler *debate_votes_http_transport.DebateVotesHTTPHandler,
-	commentsHandler *comments_transport_http.CommentsHTTPHandler,
-	commentRatingsHandler *comment_ratings_http_transport.CommentRatingsHTTPHandler,
-	statisticsHandler *statistics_http_transport.StatisticsHTTPHandler,
+	authHandler RouterRegistrar,
+	usersHandler RouterRegistrar,
+	postsHandler RouterRegistrar,
+	postImagesHandler RouterRegistrar,
+	debateVotesHandler RouterRegistrar,
+	commentsHandler RouterRegistrar,
+	commentRatingsHandler RouterRegistrar,
+	statisticsHandler RouterRegistrar,
 	parser core_http_middleware.TokenParser,
 ) {
 	jwt := core_http_middleware.JWT(parser)
@@ -44,11 +41,6 @@ func RegisterRoutes(
 
 	comments := api.Group("/comments")
 	comments.Use(jwt)
-
-	{
-		comments.PATCH("/:id", commentsHandler.UpdateComment)
-		comments.PATCH("/:id/author-like", commentsHandler.SetAuthorLike)
-	}
 	commentRatingsHandler.Register(comments)
 
 	statisticsHandler.Register(debates)

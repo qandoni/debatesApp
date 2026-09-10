@@ -23,8 +23,6 @@ type AvatarService interface {
 		userID int,
 		reader io.Reader,
 		size int64,
-		contentType string,
-		extension string,
 	) error
 }
 

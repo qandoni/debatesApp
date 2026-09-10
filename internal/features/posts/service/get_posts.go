@@ -2,6 +2,7 @@ package posts_service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
@@ -19,31 +20,70 @@ func (s *PostsService) GetPosts(
 			core_errors.ErrInvalidArgument,
 		)
 	}
+
 	if offset != nil && *offset < 0 {
 		return nil, fmt.Errorf(
 			"offset must be non-negative: %w",
 			core_errors.ErrInvalidArgument,
 		)
 	}
+
 	posts, err := s.postsRepository.GetPosts(ctx, limit, offset)
 	if err != nil {
-		return []domain.Post{}, fmt.Errorf("get posts from repository: %w", err)
+		return []domain.Post{}, fmt.Errorf(
+			"get posts from repository: %w",
+			err,
+		)
 	}
+
+	postIDs := make([]int, 0, len(posts))
+
+	for _, post := range posts {
+		postIDs = append(postIDs, post.ID)
+	}
+
+	imagesByPostID, err := s.imagesService.GetByPostIDs(ctx, postIDs)
+	if err != nil {
+		return []domain.Post{}, fmt.Errorf(
+			"get images for posts: %w",
+			err,
+		)
+	}
+
 	for i := range posts {
-		images, err := s.imagesService.GetByPostID(ctx, posts[i].ID)
+		posts[i].Images = imagesByPostID[posts[i].ID]
+
+		debate, err := s.debatesRepository.GetByPostID(
+			ctx,
+			posts[i].ID,
+		)
 		if err != nil {
-			return []domain.Post{}, fmt.Errorf("get images for post with id: '%d': %w", posts[i].ID, err)
+			if errors.Is(err, core_errors.ErrNotFound) {
+				continue
+			}
+
+			return []domain.Post{}, fmt.Errorf(
+				"get debate for post with id '%d': %w",
+				posts[i].ID,
+				err,
+			)
 		}
-		posts[i].Images = images
-		debate, err := s.debatesRepository.GetByPostID(ctx, posts[i].ID)
-		sides, err := s.debateSidesRepository.GetByDebateID(ctx, debate.ID)
+
+		sides, err := s.debateSidesRepository.GetByDebateID(
+			ctx,
+			debate.ID,
+		)
+		if err != nil {
+			return []domain.Post{}, fmt.Errorf(
+				"get debate sides for post with id '%d': %w",
+				posts[i].ID,
+				err,
+			)
+		}
+
 		debate.Sides = sides
 		posts[i].Debate = &debate
 	}
 
-	// TODO передалать цикл для производительности под GetByPostIDs(
-	//     ctx context.Context,
-	//     postIDs []int,
-	// ) (map[int][]domain.PostImage, error)
 	return posts, nil
 }
