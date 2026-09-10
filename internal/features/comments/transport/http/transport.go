@@ -64,10 +64,13 @@ type CommentsService interface {
 }
 
 func (h *CommentsHTTPHandler) Register(rg *gin.RouterGroup) {
-	rg.POST("/:id/comments", h.CreateComment)
-	rg.GET("/:id/comments", h.GetComments)
-	rg.POST("/:id/arguments", h.CreateArgument)
-	rg.GET("/:id/arguments", h.GetArguments)
-	rg.PATCH("/:id", h.UpdateComment)
-	rg.PATCH("/:id/author-like", h.SetAuthorLike)
+	posts := rg.Group("/posts")
+	posts.POST("/:id/comments", h.CreateComment)
+	posts.GET("/:id/comments", h.GetComments)
+	posts.POST("/:id/arguments", h.CreateArgument)
+	posts.GET("/:id/arguments", h.GetArguments)
+
+	comments := rg.Group("/comments")
+	comments.PATCH("/:id", h.UpdateComment)
+	comments.PATCH("/:id/author-like", h.SetAuthorLike)
 }

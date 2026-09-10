@@ -62,9 +62,5 @@ debatesApp-run:
 	sudo go mod tidy && \
 	go run ${PROJECT_ROOT}/cmd/debates_app/main.go
 
-minio-test-run:
-	sudo go mod tidy && \
-	go run ${PROJECT_ROOT}/cmd/test_minio/main.go
-
 ps:
 	@docker compose ps

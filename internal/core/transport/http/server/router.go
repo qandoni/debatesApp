@@ -3,6 +3,7 @@ package core_http_server
 import (
 	"github.com/gin-gonic/gin"
 	core_http_middleware "github.com/qandoni/debatesApp/internal/core/transport/http/middleware"
+	comments_transport_http "github.com/qandoni/debatesApp/internal/features/comments/transport/http"
 )
 
 type RouterRegistrar interface {
@@ -16,7 +17,7 @@ func RegisterRoutes(
 	postsHandler RouterRegistrar,
 	postImagesHandler RouterRegistrar,
 	debateVotesHandler RouterRegistrar,
-	commentsHandler RouterRegistrar,
+	commentsHandler *comments_transport_http.CommentsHTTPHandler,
 	commentRatingsHandler RouterRegistrar,
 	statisticsHandler RouterRegistrar,
 	parser core_http_middleware.TokenParser,
