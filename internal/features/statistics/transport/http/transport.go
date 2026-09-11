@@ -9,14 +9,17 @@ import (
 
 func NewStatisticsHTTPHandler(
 	debateStatisticsService StatisticsService,
+	jwt gin.HandlerFunc,
 ) *StatisticsHTTPHandler {
 	return &StatisticsHTTPHandler{
 		debateStatisticsService,
+		jwt,
 	}
 }
 
 type StatisticsHTTPHandler struct {
 	debateStatisticsService StatisticsService
+	jwt                     gin.HandlerFunc
 }
 
 type StatisticsService interface {
@@ -27,5 +30,7 @@ type StatisticsService interface {
 }
 
 func (h *StatisticsHTTPHandler) Register(rg *gin.RouterGroup) {
-	rg.GET("/:id/statistics", h.GetStatistics)
+	debates := rg.Group("/debates")
+	debates.Use(h.jwt)
+	debates.GET("/:id/statistics", h.GetStatistics)
 }

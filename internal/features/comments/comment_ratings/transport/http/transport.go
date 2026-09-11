@@ -9,14 +9,17 @@ import (
 
 func NewCommentRatingsHTTPHandler(
 	commentRatingsService CommentRatingsService,
+	jwt gin.HandlerFunc,
 ) *CommentRatingsHTTPHandler {
 	return &CommentRatingsHTTPHandler{
 		commentRatingsService,
+		jwt,
 	}
 }
 
 type CommentRatingsHTTPHandler struct {
 	commentRatingsService CommentRatingsService
+	jwt                   gin.HandlerFunc
 }
 
 type CommentRatingsService interface {
@@ -31,5 +34,7 @@ type CommentRatingsService interface {
 func (h *CommentRatingsHTTPHandler) Register(
 	rg *gin.RouterGroup,
 ) {
-	rg.PUT("/:id/rating", h.RateComment)
+	comments := rg.Group("/comments")
+	comments.Use(h.jwt)
+	comments.PUT("/:id/rating", h.RateComment)
 }

@@ -11,10 +11,12 @@ import (
 
 type PostsHTTPHandler struct {
 	postsService PostsService
+	jwt          gin.HandlerFunc
 }
 
 type PostImagesHTTPHandler struct {
 	imagesService ImagesService
+	jwt           gin.HandlerFunc
 }
 
 type ImagesService interface {
@@ -64,21 +66,26 @@ type PostsService interface {
 
 func NewPostImagesHTTPHandler(
 	imagesService ImagesService,
+	jwt gin.HandlerFunc,
 ) *PostImagesHTTPHandler {
 	return &PostImagesHTTPHandler{
 		imagesService,
+		jwt,
 	}
 }
 func NewPostsHTTPHandler(
 	postsService PostsService,
+	jwt gin.HandlerFunc,
 ) *PostsHTTPHandler {
 	return &PostsHTTPHandler{
 		postsService: postsService,
+		jwt:          jwt,
 	}
 }
 
 func (h *PostsHTTPHandler) Register(rg *gin.RouterGroup) {
-	posts := rg.Group("")
+	posts := rg.Group("/posts")
+	posts.Use(h.jwt)
 	posts.POST("", h.CreatePost)
 	posts.GET("/:id", h.GetPost)
 	posts.PATCH("/:id", h.PatchPost)
@@ -87,7 +94,8 @@ func (h *PostsHTTPHandler) Register(rg *gin.RouterGroup) {
 }
 
 func (h *PostImagesHTTPHandler) Register(rg *gin.RouterGroup) {
-	posts := rg.Group("")
+	posts := rg.Group("/posts")
+	posts.Use(h.jwt)
 	posts.GET("/:id/images", h.GetByPostID)
 	posts.POST("/:id/images", h.CreatePostImages)
 	posts.DELETE("/:id/images", h.DeleteByPostID)

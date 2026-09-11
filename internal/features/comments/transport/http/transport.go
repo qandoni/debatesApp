@@ -9,14 +9,17 @@ import (
 
 func NewCommentsHTTPHandler(
 	commentsService CommentsService,
+	jwt gin.HandlerFunc,
 ) *CommentsHTTPHandler {
 	return &CommentsHTTPHandler{
 		commentsService,
+		jwt,
 	}
 }
 
 type CommentsHTTPHandler struct {
 	commentsService CommentsService
+	jwt             gin.HandlerFunc
 }
 
 type CommentsService interface {
@@ -65,12 +68,14 @@ type CommentsService interface {
 
 func (h *CommentsHTTPHandler) Register(rg *gin.RouterGroup) {
 	posts := rg.Group("/posts")
+	posts.Use(h.jwt)
 	posts.POST("/:id/comments", h.CreateComment)
 	posts.GET("/:id/comments", h.GetComments)
 	posts.POST("/:id/arguments", h.CreateArgument)
 	posts.GET("/:id/arguments", h.GetArguments)
 
 	comments := rg.Group("/comments")
+	comments.Use(h.jwt)
 	comments.PATCH("/:id", h.UpdateComment)
 	comments.PATCH("/:id/author-like", h.SetAuthorLike)
 }

@@ -11,6 +11,7 @@ import (
 type UsersHTTPHandler struct {
 	usersService  UsersService
 	avatarService AvatarService
+	jwt           gin.HandlerFunc
 }
 
 type UsersService interface {
@@ -29,15 +30,18 @@ type AvatarService interface {
 func NewUsersHTTPHandler(
 	usersService UsersService,
 	avatarService AvatarService,
+	jwt gin.HandlerFunc,
 ) *UsersHTTPHandler {
 	return &UsersHTTPHandler{
 		usersService:  usersService,
 		avatarService: avatarService,
+		jwt:           jwt,
 	}
 }
 
 func (h *UsersHTTPHandler) Register(rg *gin.RouterGroup) {
-	users := rg.Group("")
+	users := rg.Group("/users")
+	users.Use(h.jwt)
 	users.GET("/me", h.GetMyProfile)
 	users.PATCH("/me", h.EditProfile)
 	users.POST("/me/avatar", h.UploadAvatar)

@@ -26,9 +26,14 @@ func (s *ImagesService) DeleteByPostID(
 		return fmt.Errorf("get post images: %w", err)
 	}
 
+	if len(images) == 0 {
+		return nil
+	}
+
 	for _, image := range images {
 		if err := s.storage.Delete(ctx, image.ImageURL); err != nil {
-			return fmt.Errorf("delete image %q from storage: %w",
+			return fmt.Errorf(
+				"delete image %q from storage: %w",
 				image.ImageURL,
 				err,
 			)
@@ -38,5 +43,6 @@ func (s *ImagesService) DeleteByPostID(
 	if err := s.postImagesRepository.DeleteByPostID(ctx, postID); err != nil {
 		return fmt.Errorf("delete post images: %w", err)
 	}
+
 	return nil
 }

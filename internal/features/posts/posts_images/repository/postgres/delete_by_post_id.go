@@ -3,8 +3,6 @@ package post_images_repository
 import (
 	"context"
 	"fmt"
-
-	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
 )
 
 func (r *PostImagesRepository) DeleteByPostID(
@@ -19,12 +17,9 @@ func (r *PostImagesRepository) DeleteByPostID(
 	WHERE post_id=$1;
 	`
 	db := r.dbFromContext(ctx)
-	cmdTag, err := db.Exec(ctx, query, postID)
+	_, err := db.Exec(ctx, query, postID)
 	if err != nil {
 		return fmt.Errorf("exec query: %w", err)
-	}
-	if cmdTag.RowsAffected() == 0 {
-		return fmt.Errorf("post_images with post_id='%d': %w", postID, core_errors.ErrNotFound)
 	}
 	return nil
 }

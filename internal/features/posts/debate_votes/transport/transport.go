@@ -9,14 +9,17 @@ import (
 
 func NewDebateVotesHTTPTransport(
 	debateVotesService DebateVotesService,
+	jwt gin.HandlerFunc,
 ) *DebateVotesHTTPHandler {
 	return &DebateVotesHTTPHandler{
 		debateVotesService,
+		jwt,
 	}
 }
 
 type DebateVotesHTTPHandler struct {
 	debateVotesService DebateVotesService
+	jwt                gin.HandlerFunc
 }
 
 type DebateVotesService interface {
@@ -38,7 +41,9 @@ type VoteRequest struct {
 }
 
 func (h *DebateVotesHTTPHandler) Register(rg *gin.RouterGroup) {
-	rg.POST("/:id/vote", h.Vote)
-	rg.PATCH("/:id/vote", h.ChangeVote)
-	rg.POST("/:id/finish", h.FinishDebate)
+	debates := rg.Group("/debates")
+	debates.Use(h.jwt)
+	debates.POST("/:id/vote", h.Vote)
+	debates.PATCH("/:id/vote", h.ChangeVote)
+	debates.POST("/:id/finish", h.FinishDebate)
 }

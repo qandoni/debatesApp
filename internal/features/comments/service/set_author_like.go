@@ -19,7 +19,6 @@ func (s *CommentsService) SetAuthorLike(
 		return domain.Comment{}, fmt.Errorf("get comment: %w", err)
 	}
 
-	// Авторский лайк можно поставить только аргументу.
 	if comment.DebateSideID == nil {
 		return domain.Comment{}, fmt.Errorf(
 			"author like is available only for arguments: %w",
@@ -27,7 +26,6 @@ func (s *CommentsService) SetAuthorLike(
 		)
 	}
 
-	// Авторский лайк можно поставить только корневому аргументу.
 	if comment.ParentCommentID != nil {
 		return domain.Comment{}, fmt.Errorf(
 			"author like is available only for root arguments: %w",

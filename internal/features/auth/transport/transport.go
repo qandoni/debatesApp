@@ -31,6 +31,7 @@ func NewAuthHTTPHandler(
 }
 
 func (h *AuthHTTPHandler) Register(rg *gin.RouterGroup) {
-	rg.POST("/login", h.Login)
-	rg.POST("/registrate", h.Registrate)
+	auth := rg.Group("/auth")
+	auth.POST("/login", h.Login)
+	auth.POST("/registrate", h.Registrate)
 }

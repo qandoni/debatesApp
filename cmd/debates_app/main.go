@@ -70,6 +70,10 @@ func main() {
 	logger.Debug("initializing transaction manager")
 	txManager := core_pgx_pool.NewTransactionManager(pool)
 
+	logger.Debug("initializing JWT manager")
+	jwtManager := auth_jwt.NewJWTManager("my-secret-key")
+	jwt := core_http_middleware.JWT(jwtManager)
+
 	logger.Debug("initializing feature", zap.String("feature", "minio"))
 
 	minioConfig := minio.NewConfigMust()
@@ -91,11 +95,10 @@ func main() {
 	usersRepository := users_repository.NewUsersRepository(pool, pool.OpTimeout())
 	avatarService := images_service.NewAvatarService(storage, usersRepository)
 	usersService := users_service.NewUsersService(usersRepository, passwordHasher)
-	usersHTTPTransport := users_http_transport.NewUsersHTTPHandler(usersService, avatarService)
+	usersHTTPTransport := users_http_transport.NewUsersHTTPHandler(usersService, avatarService, jwt)
 
 	logger.Debug("initializing feature", zap.String("feature", "auth"))
 	sha256Hasher := core_password_hash.NewSHA256Hasher()
-	jwtManager := auth_jwt.NewJWTManager("my-secret-key")
 	authService := auth_service.NewAuthService(usersRepository, passwordHasher, sha256Hasher, jwtManager, txManager)
 	authTransportHTTP := auth_http_transport.NewAuthHTTPHandler(authService)
 
@@ -106,20 +109,20 @@ func main() {
 	debatesRepository := debates_repository.NewDebatesRepository(pool, pool.OpTimeout())
 	debatesSidesRepository := debate_sides_repository.NewDebateSidesRepository(pool, pool.OpTimeout())
 	postsService := posts_service.NewPostsService(postsRepository, imagesService, debatesRepository, debatesSidesRepository, txManager)
-	postsHTTPTransport := posts_http_transport.NewPostsHTTPHandler(postsService)
-	postImagesHTTPTransport := posts_http_transport.NewPostImagesHTTPHandler(imagesService)
+	postsHTTPTransport := posts_http_transport.NewPostsHTTPHandler(postsService, jwt)
+	postImagesHTTPTransport := posts_http_transport.NewPostImagesHTTPHandler(imagesService, jwt)
 	debateVotesRepository := debate_votes_repository.NewDebateVotesRepository(pool, pool.OpTimeout())
 	commentsRepository := comments_repository.NewCommentsRepository(pool, pool.OpTimeout())
 	commentsService := comments_service.NewCommentsService(commentsRepository, postsRepository, debatesRepository, debatesSidesRepository, debateVotesRepository)
-	commentsHTTPTransport := comments_transport_http.NewCommentsHTTPHandler(commentsService)
+	commentsHTTPTransport := comments_transport_http.NewCommentsHTTPHandler(commentsService, jwt)
 	debateVotesService := debate_votes_service.NewDebateVotesService(debateVotesRepository, debatesRepository, debatesSidesRepository, commentsRepository)
-	debateVotesHTTPTransport := debate_votes_http_transport.NewDebateVotesHTTPTransport(debateVotesService)
+	debateVotesHTTPTransport := debate_votes_http_transport.NewDebateVotesHTTPTransport(debateVotesService, jwt)
 	commentRatingsRepository := comments_ratings_repository.NewCommentRatingsRepository(pool, pool.OpTimeout())
 	commentRatingsService := comment_ratings_service.NewCommentRatingsService(commentRatingsRepository, commentsRepository, debatesRepository)
-	commentRatingsHTTPHandler := comment_ratings_http_transport.NewCommentRatingsHTTPHandler(commentRatingsService)
+	commentRatingsHTTPHandler := comment_ratings_http_transport.NewCommentRatingsHTTPHandler(commentRatingsService, jwt)
 	statisticsRepository := statistics_repository.NewDebateStatisticsRepository(pool, pool.OpTimeout())
 	statisticsService := statistics_service.NewStatisticsService(statisticsRepository, debatesRepository)
-	statisticsHTTPHandler := statistics_http_transport.NewStatisticsHTTPHandler(statisticsService)
+	statisticsHTTPHandler := statistics_http_transport.NewStatisticsHTTPHandler(statisticsService, jwt)
 
 	logger.Debug("initializing HTTP server")
 	server := core_http_server.NewHTTPServer(
@@ -144,7 +147,6 @@ func main() {
 		commentsHTTPTransport,
 		commentRatingsHTTPHandler,
 		statisticsHTTPHandler,
-		jwtManager,
 	)
 	if err := server.Run(ctx); err != nil {
 		logger.Error(

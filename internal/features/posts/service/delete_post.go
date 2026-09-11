@@ -11,7 +11,7 @@ func (s *PostsService) DeletePost(
 	postID int,
 ) error {
 	if err := s.imagesService.DeleteByPostID(ctx, userID, postID); err != nil {
-		return fmt.Errorf("delete post_images: %w", err)
+		return fmt.Errorf("delete post images: %w", err)
 	}
 	if err := s.postsRepository.DeletePost(ctx, userID, postID); err != nil {
 		return fmt.Errorf("delete post: %w", err)
