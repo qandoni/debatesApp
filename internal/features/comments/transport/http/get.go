@@ -35,3 +35,35 @@ func (h *CommentsHTTPHandler) GetComments(c *gin.Context) {
 
 	c.JSON(http.StatusOK, response)
 }
+
+func (h *CommentsHTTPHandler) GetArguments(c *gin.Context) {
+	postID, err := core_http_request.GetIntPathValue(c, "id")
+	if err != nil {
+		c.Error(err).SetMeta("failed to get 'id' path value")
+		return
+	}
+
+	limit, offset, err := core_http_request.GetLimitOffsetQueryParams(c)
+	if err != nil {
+		c.Error(err).SetMeta("failed to get limit/offset query params")
+		return
+	}
+
+	arguments, comments, err := h.commentsService.GetArgumentsWithReplies(
+		c.Request.Context(),
+		postID,
+		limit,
+		offset,
+	)
+	if err != nil {
+		c.Error(err).SetMeta("failed to get arguments")
+		return
+	}
+
+	response := comments_dto.BuildArgumentTree(
+		arguments,
+		comments,
+	)
+
+	c.JSON(http.StatusOK, response)
+}
