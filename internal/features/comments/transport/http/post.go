@@ -10,6 +10,50 @@ import (
 	comments_dto "github.com/qandoni/debatesApp/internal/features/comments/transport/http/dto"
 )
 
+type CreateCommentRequest struct {
+	ParentCommentID *int   `json:"parent_comment_id"`
+	Content         string `json:"content" validate:"required,min=1,max=5000"`
+}
+
+func (h *CommentsHTTPHandler) CreateComment(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	authInfo, ok := core_auth.AuthInfoFromContext(ctx)
+	if !ok {
+		c.Error(core_errors.ErrAccessForbidden).SetMeta("no auth info in request context")
+		return
+	}
+
+	postID, err := core_http_request.GetIntPathValue(c, "id")
+	if err != nil {
+		c.Error(err).SetMeta("failed to get 'id' path value")
+		return
+	}
+
+	var req CreateCommentRequest
+
+	if err := core_http_request.DecodeAndValidateRequest(c, &req); err != nil {
+		c.Error(err).SetMeta("failed to decode and validate request")
+		return
+	}
+
+	comment, err := h.commentsService.CreateComment(
+		c.Request.Context(),
+		authInfo.UserID,
+		postID,
+		req.ParentCommentID,
+		req.Content,
+	)
+	if err != nil {
+		c.Error(err).SetMeta("failed to create comment")
+		return
+	}
+
+	response := comments_dto.NewCommentDTOFromDomain(comment)
+
+	c.JSON(http.StatusCreated, response)
+}
+
 type CreateArgumentRequest struct {
 	DebateSideID int    `json:"debate_side_id" validate:"required,gt=0"`
 	Content      string `json:"content" validate:"required,min=1,max=5000"`
