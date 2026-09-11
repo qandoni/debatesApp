@@ -30,24 +30,3 @@ func (h *PostsHTTPHandler) DeletePost(c *gin.Context) {
 	}
 	c.Status(http.StatusNoContent)
 }
-
-func (h *PostImagesHTTPHandler) DeleteByPostID(c *gin.Context) {
-	ctx := c.Request.Context()
-
-	authInfo, ok := core_auth.AuthInfoFromContext(ctx)
-	if !ok {
-		c.Error(core_errors.ErrAccessForbidden).SetMeta("no auth info in request context")
-		return
-	}
-	postID, err := core_http_request.GetIntPathValue(c, "id")
-	if err != nil {
-		c.Error(err).SetMeta("failed to get 'id' int path value")
-		return
-	}
-	if err := h.imagesService.DeleteByPostID(ctx, authInfo.UserID, postID); err != nil {
-		c.Error(err).SetMeta("failed to delete by post id")
-		return
-	}
-	c.Status(http.StatusNoContent)
-
-}

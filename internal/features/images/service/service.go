@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
+	core_postgres "github.com/qandoni/debatesApp/internal/core/repository/postgres"
 	"github.com/qandoni/debatesApp/internal/features/storage"
 )
 
@@ -11,11 +12,13 @@ func NewImagesService(
 	storage storage.ImageStorage,
 	postsRepository PostsRepository,
 	postImagesRepository PostImagesRepository,
+	txManager core_postgres.TransactionManager,
 ) *ImagesService {
 	return &ImagesService{
 		storage,
 		postsRepository,
 		postImagesRepository,
+		txManager,
 	}
 }
 
@@ -23,6 +26,7 @@ type ImagesService struct {
 	storage              storage.ImageStorage
 	postsRepository      PostsRepository
 	postImagesRepository PostImagesRepository
+	txManager            core_postgres.TransactionManager
 }
 
 func NewAvatarService(

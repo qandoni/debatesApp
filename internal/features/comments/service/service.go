@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
+	core_postgres "github.com/qandoni/debatesApp/internal/core/repository/postgres"
 	debate_votes_contracts "github.com/qandoni/debatesApp/internal/features/posts/debate_votes/contracts"
 )
 
@@ -13,6 +14,7 @@ func NewCommentsService(
 	debatesRepository DebatesRepository,
 	debateSidesRepository DebateSidesRepository,
 	debateVotesRepository DebateVotesRepository,
+	txManager core_postgres.TransactionManager,
 ) *CommentsService {
 	return &CommentsService{
 		commentsRepository,
@@ -20,6 +22,7 @@ func NewCommentsService(
 		debatesRepository,
 		debateSidesRepository,
 		debateVotesRepository,
+		txManager,
 	}
 }
 
@@ -29,6 +32,7 @@ type CommentsService struct {
 	debatesRepository     DebatesRepository
 	debateSidesRepository DebateSidesRepository
 	debateVotesRepository DebateVotesRepository
+	txManager             core_postgres.TransactionManager
 }
 
 type DebateVotesRepository interface {
