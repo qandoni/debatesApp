@@ -10,6 +10,22 @@ import (
 	core_postgres_pool "github.com/qandoni/debatesApp/internal/core/repository/postgres/pool"
 )
 
+const getPostQuery = `
+SELECT *
+FROM debatesApp.posts
+WHERE id=$1
+AND deleted_at IS null;
+`
+
+const getPostsQuery = `
+SELECT id, version, author_id, content, is_debate, created_at, updated_at, deleted_at
+FROM debatesApp.posts
+WHERE deleted_at IS null
+ORDER BY id ASC
+LIMIT $1
+OFFSET $2;
+`
+
 func (r *PostsRepository) GetPost(
 	ctx context.Context,
 	postID int,
@@ -17,14 +33,8 @@ func (r *PostsRepository) GetPost(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `
-SELECT *
-FROM debatesApp.posts
-WHERE id=$1
-AND deleted_at IS null;
-`
 	db := r.dbFromContext(ctx)
-	row := db.QueryRow(ctx, query, postID)
+	row := db.QueryRow(ctx, getPostQuery, postID)
 	var postModel PostModel
 
 	err := row.Scan(
@@ -65,17 +75,8 @@ func (r *PostsRepository) GetPosts(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `
-SELECT id, version, author_id, content, is_debate, created_at, updated_at, deleted_at
-FROM debatesApp.posts
-WHERE deleted_at IS null
-ORDER BY id ASC
-LIMIT $1
-OFFSET $2;
-`
-
 	db := r.dbFromContext(ctx)
-	rows, err := db.Query(ctx, query, limit, offset)
+	rows, err := db.Query(ctx, getPostsQuery, limit, offset)
 	if err != nil {
 		return []domain.Post{}, fmt.Errorf("select posts: %w", err)
 	}

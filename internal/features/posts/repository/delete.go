@@ -8,6 +8,14 @@ import (
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
 )
 
+const deletePostQuery = `
+UPDATE debatesApp.posts
+SET
+	deleted_at=$1
+WHERE id=$2
+AND author_id=$3;
+`
+
 func (r *PostsRepository) DeletePost(
 	ctx context.Context,
 	userID int,
@@ -16,16 +24,8 @@ func (r *PostsRepository) DeletePost(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `
-		UPDATE debatesApp.posts
-		SET
-			deleted_at=$1
-		WHERE id=$2
-		AND author_id=$3;
-	`
-
 	db := r.dbFromContext(ctx)
-	cmdTag, err := db.Exec(ctx, query, time.Now(), postID, userID)
+	cmdTag, err := db.Exec(ctx, deletePostQuery, time.Now(), postID, userID)
 	if err != nil {
 		return fmt.Errorf("exec query: %w", err)
 	}

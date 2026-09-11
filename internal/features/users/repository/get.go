@@ -11,17 +11,30 @@ import (
 	core_postgres_pool "github.com/qandoni/debatesApp/internal/core/repository/postgres/pool"
 )
 
-func (r *UsersRepository) GetMyProfile(ctx context.Context, userID int) (domain.User, error) {
-	ctx, cancel := context.WithTimeout(ctx, r.timeout)
-	defer cancel()
-
-	query := `
+const getMyProfileQuery = `
 SELECT id, version, username, email, password_hash, avatar_url, bio, created_at, updated_at
 FROM debatesApp.users
 WHERE id=$1;
 `
+
+const getUserByEmailQuery = `
+SELECT id, version, username, email, password_hash, avatar_url, bio, created_at, updated_at
+FROM debatesApp.users
+WHERE email=$1;
+`
+
+const getAvatarURLQuery = `
+SELECT avatar_url
+FROM debatesapp.users
+WHERE id = $1
+`
+
+func (r *UsersRepository) GetMyProfile(ctx context.Context, userID int) (domain.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
 	db := r.dbFromContext(ctx)
-	row := db.QueryRow(ctx, query, userID)
+	row := db.QueryRow(ctx, getMyProfileQuery, userID)
 	var userModel UserModel
 
 	err := row.Scan(
@@ -63,13 +76,8 @@ func (r *UsersRepository) GetUserByEmail(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `
-SELECT id, version, username, email, password_hash, avatar_url, bio, created_at, updated_at
-FROM debatesApp.users
-WHERE email=$1;
-`
 	db := r.dbFromContext(ctx)
-	row := db.QueryRow(ctx, query, email)
+	row := db.QueryRow(ctx, getUserByEmailQuery, email)
 
 	var userModel UserModel
 
@@ -114,15 +122,9 @@ func (r *UsersRepository) GetAvatarURL(
 
 	db := r.dbFromContext(ctx)
 
-	query := `
-		SELECT avatar_url
-		FROM debatesapp.users
-		WHERE id = $1
-	`
-
 	var avatarURL *string
 
-	err := db.QueryRow(ctx, query, userID).Scan(&avatarURL)
+	err := db.QueryRow(ctx, getAvatarURLQuery, userID).Scan(&avatarURL)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, core_errors.ErrNotFound

@@ -7,14 +7,7 @@ import (
 	"github.com/qandoni/debatesApp/internal/core/domain"
 )
 
-func (r *PostImagesRepository) GetByPostID(
-	ctx context.Context,
-	postID int,
-) ([]domain.PostImage, error) {
-	ctx, cancel := context.WithTimeout(ctx, r.timeout)
-	defer cancel()
-
-	query := `
+const getByPostIDQuery = `
 SELECT
 	id,
 	post_id,
@@ -26,8 +19,27 @@ WHERE post_id = $1
 ORDER BY display_order
 `
 
+const getByPostIDsQuery = `
+SELECT
+	id,
+	post_id,
+	image_url,
+	display_order,
+	created_at
+FROM debatesapp.post_images
+WHERE post_id = ANY($1)
+ORDER BY post_id, display_order
+`
+
+func (r *PostImagesRepository) GetByPostID(
+	ctx context.Context,
+	postID int,
+) ([]domain.PostImage, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
 	db := r.dbFromContext(ctx)
-	rows, err := db.Query(ctx, query, postID)
+	rows, err := db.Query(ctx, getByPostIDQuery, postID)
 	if err != nil {
 		return []domain.PostImage{}, fmt.Errorf("select post_images: %w", err)
 	}
@@ -63,21 +75,9 @@ func (r *PostImagesRepository) GetByPostIDs(
 		return map[int][]domain.PostImage{}, nil
 	}
 
-	query := `
-		SELECT
-			id,
-			post_id,
-			image_url,
-			display_order,
-			created_at
-		FROM debatesapp.post_images
-		WHERE post_id = ANY($1)
-		ORDER BY post_id, display_order
-	`
-
 	db := r.dbFromContext(ctx)
 
-	rows, err := db.Query(ctx, query, postIDs)
+	rows, err := db.Query(ctx, getByPostIDsQuery, postIDs)
 	if err != nil {
 		return nil, fmt.Errorf("select post_images: %w", err)
 	}

@@ -10,6 +10,100 @@ import (
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
 )
 
+const getStatisticsQuery = `
+SELECT
+	ds.id AS side_id,
+	ds.name AS side_name,
+	d.post_id,
+	d.winner_side_id,
+
+	(
+		SELECT COUNT(*)
+		FROM debatesapp.debate_votes dv
+		WHERE dv.debate_id = d.id
+		  AND dv.debate_side_id = ds.id
+	) AS participants_count,
+
+	COALESCE(
+		(
+			SELECT COUNT(*)
+			FROM debatesapp.debate_votes dv
+			WHERE dv.debate_id = d.id
+			  AND dv.debate_side_id = ds.id
+		) * 100.0
+		/
+		NULLIF(
+			(
+				SELECT COUNT(*)
+				FROM debatesapp.debate_votes dv_total
+				WHERE dv_total.debate_id = d.id
+			),
+			0
+		),
+		0
+	) AS votes_percent,
+
+	(
+		SELECT COUNT(*)
+		FROM debatesapp.comments c
+		WHERE c.post_id = d.post_id
+		  AND c.debate_side_id = ds.id
+		  AND c.parent_comment_id IS NULL
+	) AS arguments_count,
+
+	COALESCE(
+		(
+			SELECT AVG(argument_rating.average_rating)
+			FROM (
+				SELECT
+					c.id,
+					COALESCE(AVG(cr.score), 0) AS average_rating
+				FROM debatesapp.comments c
+				LEFT JOIN debatesapp.comment_ratings cr
+					ON cr.comment_id = c.id
+				WHERE c.post_id = d.post_id
+				  AND c.debate_side_id = ds.id
+				  AND c.parent_comment_id IS NULL
+				GROUP BY c.id
+			) AS argument_rating
+		),
+		0
+	) AS average_argument_rating
+
+FROM debatesapp.debate_sides ds
+JOIN debatesapp.debates d
+	ON d.id = ds.debate_id
+
+WHERE ds.debate_id = $1
+
+ORDER BY ds.display_order, ds.id
+`
+
+const getTopArgumentQuery = `
+SELECT
+	c.id,
+	c.author_id,
+	c.content,
+	COALESCE(AVG(cr.score), 0) AS average_rating,
+	COUNT(cr.id) AS ratings_count
+FROM debatesapp.comments c
+LEFT JOIN debatesapp.comment_ratings cr
+	ON cr.comment_id = c.id
+WHERE c.post_id = $1
+  AND c.debate_side_id = $2
+  AND c.parent_comment_id IS NULL
+GROUP BY
+	c.id,
+	c.author_id,
+	c.content,
+	c.created_at
+ORDER BY
+	average_rating DESC,
+	ratings_count DESC,
+	c.created_at ASC
+LIMIT 1
+`
+
 func (r *DebateStatisticsRepository) GetStatistics(
 	ctx context.Context,
 	debateID int,
@@ -19,76 +113,7 @@ func (r *DebateStatisticsRepository) GetStatistics(
 
 	db := r.dbFromContext(ctx)
 
-	query := `
-		SELECT
-			ds.id AS side_id,
-			ds.name AS side_name,
-			d.post_id,
-			d.winner_side_id,
-
-			(
-				SELECT COUNT(*)
-				FROM debatesapp.debate_votes dv
-				WHERE dv.debate_id = d.id
-				  AND dv.debate_side_id = ds.id
-			) AS participants_count,
-
-			COALESCE(
-				(
-					SELECT COUNT(*)
-					FROM debatesapp.debate_votes dv
-					WHERE dv.debate_id = d.id
-					  AND dv.debate_side_id = ds.id
-				) * 100.0
-				/
-				NULLIF(
-					(
-						SELECT COUNT(*)
-						FROM debatesapp.debate_votes dv_total
-						WHERE dv_total.debate_id = d.id
-					),
-					0
-				),
-				0
-			) AS votes_percent,
-
-			(
-				SELECT COUNT(*)
-				FROM debatesapp.comments c
-				WHERE c.post_id = d.post_id
-				  AND c.debate_side_id = ds.id
-				  AND c.parent_comment_id IS NULL
-			) AS arguments_count,
-
-			COALESCE(
-				(
-					SELECT AVG(argument_rating.average_rating)
-					FROM (
-						SELECT
-							c.id,
-							COALESCE(AVG(cr.score), 0) AS average_rating
-						FROM debatesapp.comments c
-						LEFT JOIN debatesapp.comment_ratings cr
-							ON cr.comment_id = c.id
-						WHERE c.post_id = d.post_id
-						  AND c.debate_side_id = ds.id
-						  AND c.parent_comment_id IS NULL
-						GROUP BY c.id
-					) AS argument_rating
-				),
-				0
-			) AS average_argument_rating
-
-		FROM debatesapp.debate_sides ds
-		JOIN debatesapp.debates d
-			ON d.id = ds.debate_id
-
-		WHERE ds.debate_id = $1
-
-		ORDER BY ds.display_order, ds.id
-	`
-
-	rows, err := db.Query(ctx, query, debateID)
+	rows, err := db.Query(ctx, getStatisticsQuery, debateID)
 	if err != nil {
 		return domain.DebateStatistics{}, fmt.Errorf(
 			"get debate statistics: %w",
@@ -196,34 +221,9 @@ func (r *DebateStatisticsRepository) getTopArgument(
 
 	db := r.dbFromContext(ctx)
 
-	query := `
-		SELECT
-			c.id,
-			c.author_id,
-			c.content,
-			COALESCE(AVG(cr.score), 0) AS average_rating,
-			COUNT(cr.id) AS ratings_count
-		FROM debatesapp.comments c
-		LEFT JOIN debatesapp.comment_ratings cr
-			ON cr.comment_id = c.id
-		WHERE c.post_id = $1
-		  AND c.debate_side_id = $2
-		  AND c.parent_comment_id IS NULL
-		GROUP BY
-			c.id,
-			c.author_id,
-			c.content,
-			c.created_at
-		ORDER BY
-			average_rating DESC,
-			ratings_count DESC,
-			c.created_at ASC
-		LIMIT 1
-	`
-
 	var argument domain.TopArgument
 
-	err := db.QueryRow(ctx, query, postID, sideID).Scan(
+	err := db.QueryRow(ctx, getTopArgumentQuery, postID, sideID).Scan(
 		&argument.ID,
 		&argument.AuthorID,
 		&argument.Content,

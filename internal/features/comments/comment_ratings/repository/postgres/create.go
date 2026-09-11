@@ -7,6 +7,26 @@ import (
 	"github.com/qandoni/debatesApp/internal/core/domain"
 )
 
+const createCommentRatingQuery = `
+INSERT INTO debatesApp.comment_ratings (
+	version,
+	comment_id,
+	user_id,
+	score,
+	created_at,
+	updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING
+	id,
+	version,
+	comment_id,
+	user_id,
+	score,
+	created_at,
+	updated_at
+`
+
 func (r *CommentRatingsRepository) CreateCommentRating(
 	ctx context.Context,
 	rating domain.CommentRating,
@@ -16,31 +36,11 @@ func (r *CommentRatingsRepository) CreateCommentRating(
 
 	db := r.dbFromContext(ctx)
 
-	query := `
-		INSERT INTO debatesApp.comment_ratings (
-			version,
-			comment_id,
-			user_id,
-			score,
-			created_at,
-			updated_at
-		)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING
-			id,
-			version,
-			comment_id,
-			user_id,
-			score,
-			created_at,
-			updated_at
-	`
-
 	var result domain.CommentRating
 
 	err := db.QueryRow(
 		ctx,
-		query,
+		createCommentRatingQuery,
 		rating.Version,
 		rating.CommentID,
 		rating.UserID,

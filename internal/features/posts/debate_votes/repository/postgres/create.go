@@ -7,6 +7,27 @@ import (
 	"github.com/qandoni/debatesApp/internal/core/domain"
 )
 
+const createDebateVoteQuery = `
+INSERT INTO debatesApp.debate_votes (
+	debate_id,
+	user_id,
+	debate_side_id,
+	created_at,
+	updated_at,
+	is_changed
+)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING
+	id,
+	version,
+	debate_id,
+	user_id,
+	debate_side_id,
+	created_at,
+	updated_at,
+	is_changed
+`
+
 func (r *DebateVotesRepository) Create(
 	ctx context.Context,
 	vote domain.DebateVote,
@@ -14,32 +35,11 @@ func (r *DebateVotesRepository) Create(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `
-		INSERT INTO debatesApp.debate_votes (
-			debate_id,
-			user_id,
-			debate_side_id,
-			created_at,
-			updated_at,
-			is_changed
-		)
-		VALUES ($1, $2, $3, $4, $5, $6)
-		RETURNING
-			id,
-			version,
-			debate_id,
-			user_id,
-			debate_side_id,
-			created_at,
-			updated_at,
-			is_changed
-	`
-
 	db := r.dbFromContext(ctx)
 
 	row := db.QueryRow(
 		ctx,
-		query,
+		createDebateVoteQuery,
 		vote.DebateID,
 		vote.UserID,
 		vote.DebateSideID,

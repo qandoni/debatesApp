@@ -29,32 +29,8 @@ func (s *DebateVotesService) FinishDebate(
 		return fmt.Errorf("user is not the author of the debate: %w", core_errors.ErrAccessForbidden)
 	}
 
-	winnerSideID, err := s.CalculateWinner(ctx, debateID)
-	if err != nil {
-		return fmt.Errorf("calculate winner: %w", err)
-	}
-	if err := s.debatesRepository.FinishDebate(ctx, debateID, winnerSideID); err != nil {
+	if err := s.debatesRepository.FinishDebate(ctx, debateID); err != nil {
 		return fmt.Errorf("finish debate in repository: %w", err)
 	}
 	return nil
-}
-
-func (s *DebateVotesService) CalculateWinner(
-	ctx context.Context,
-	debateID int,
-) (*int, error) {
-	results, err := s.debateVotesRepository.GetResults(ctx, debateID)
-	if err != nil {
-		return nil, fmt.Errorf("get vote results: %w", err)
-	}
-
-	if len(results) == 0 {
-		return nil, nil
-	}
-	maxvotes := results[0].VotesCount
-	if len(results) > 1 && results[1].VotesCount == maxvotes {
-		return nil, nil
-	}
-	winnerSideID := results[0].DebateSideID
-	return &winnerSideID, nil
 }

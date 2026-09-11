@@ -10,6 +10,46 @@ import (
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
 )
 
+const updateCommentQuery = `
+UPDATE debatesApp.comments
+SET
+	content = $1,
+	updated_at = NOW(),
+	version = version + 1
+WHERE id = $2
+  AND version = $3
+RETURNING
+	id,
+	version,
+	post_id,
+	parent_comment_id,
+	author_id,
+	debate_side_id,
+	content,
+	created_at,
+	updated_at;
+`
+
+const setAuthorLikeQuery = `
+UPDATE debatesapp.comments
+SET
+	author_liked = $1,
+	version = version + 1,
+	updated_at = NOW()
+WHERE id = $2
+RETURNING
+	id,
+	version,
+	post_id,
+	parent_comment_id,
+	author_id,
+	debate_side_id,
+	content,
+	author_liked,
+	created_at,
+	updated_at
+`
+
 func (r *CommentsRepository) UpdateComment(
 	ctx context.Context,
 	comment domain.Comment,
@@ -17,33 +57,13 @@ func (r *CommentsRepository) UpdateComment(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `
-		UPDATE debatesApp.comments
-		SET
-			content = $1,
-			updated_at = NOW(),
-			version = version + 1
-		WHERE id = $2
-		  AND version = $3
-		RETURNING
-			id,
-			version,
-			post_id,
-			parent_comment_id,
-			author_id,
-			debate_side_id,
-			content,
-			created_at,
-			updated_at;
-	`
-
 	db := r.dbFromContext(ctx)
 
 	var result domain.Comment
 
 	err := db.QueryRow(
 		ctx,
-		query,
+		updateCommentQuery,
 		comment.Content,
 		comment.ID,
 		comment.Version,
@@ -84,31 +104,11 @@ func (r *CommentsRepository) SetAuthorLike(
 
 	db := r.dbFromContext(ctx)
 
-	query := `
-		UPDATE debatesapp.comments
-		SET
-			author_liked = $1,
-			version = version + 1,
-			updated_at = NOW()
-		WHERE id = $2
-		RETURNING
-			id,
-			version,
-			post_id,
-			parent_comment_id,
-			author_id,
-			debate_side_id,
-			content,
-			author_liked,
-			created_at,
-			updated_at
-	`
-
 	var comment domain.Comment
 
 	err := db.QueryRow(
 		ctx,
-		query,
+		setAuthorLikeQuery,
 		liked,
 		commentID,
 	).Scan(

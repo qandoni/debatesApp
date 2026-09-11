@@ -33,20 +33,6 @@ func (s *PostsService) GetPosts(
 	limit *int,
 	offset *int,
 ) ([]domain.Post, error) {
-	if limit != nil && *limit < 0 {
-		return nil, fmt.Errorf(
-			"limit must be non-negative: %w",
-			core_errors.ErrInvalidArgument,
-		)
-	}
-
-	if offset != nil && *offset < 0 {
-		return nil, fmt.Errorf(
-			"offset must be non-negative: %w",
-			core_errors.ErrInvalidArgument,
-		)
-	}
-
 	posts, err := s.postsRepository.GetPosts(ctx, limit, offset)
 	if err != nil {
 		return []domain.Post{}, fmt.Errorf(

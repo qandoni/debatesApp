@@ -10,11 +10,7 @@ import (
 	core_postgres_pool "github.com/qandoni/debatesApp/internal/core/repository/postgres/pool"
 )
 
-func (r *UsersRepository) EditProfile(ctx context.Context, userID int, user domain.User) (domain.User, error) {
-	ctx, cancel := context.WithTimeout(ctx, r.timeout)
-	defer cancel()
-
-	query := `
+const editProfileQuery = `
 UPDATE debatesApp.users
 SET
 	username=$1,
@@ -36,10 +32,24 @@ RETURNING
 	created_at,
 	updated_at;
 `
+
+const updateAvatarURLQuery = `
+UPDATE debatesApp.users
+SET
+	avatar_url=$1,
+	updated_at=$2,
+	version=version+1
+WHERE id=$3;
+`
+
+func (r *UsersRepository) EditProfile(ctx context.Context, userID int, user domain.User) (domain.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
 	db := r.dbFromContext(ctx)
 	row := db.QueryRow(
 		ctx,
-		query,
+		editProfileQuery,
 		user.Username,
 		user.Email,
 		user.PasswordHash,
@@ -90,20 +100,11 @@ func (r *UsersRepository) UpdateAvatarURL(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `
-UPDATE debatesApp.users
-SET
-	avatar_url=$1,
-	updated_at=$2,
-	version=version+1
-WHERE id=$3;
-`
-
 	db := r.dbFromContext(ctx)
 
 	_, err := db.Exec(
 		ctx,
-		query,
+		updateAvatarURLQuery,
 		avatarURL,
 		time.Now(),
 		userID,

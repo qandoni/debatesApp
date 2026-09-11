@@ -10,6 +10,24 @@ import (
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
 )
 
+const updateCommentRatingQuery = `
+UPDATE debatesApp.comment_ratings
+SET
+	score = $1,
+	version = version + 1,
+	updated_at = $2
+WHERE id = $3
+  AND version = $4
+RETURNING
+	id,
+	version,
+	comment_id,
+	user_id,
+	score,
+	created_at,
+	updated_at
+`
+
 func (r *CommentRatingsRepository) UpdateCommentRating(
 	ctx context.Context,
 	rating domain.CommentRating,
@@ -19,29 +37,11 @@ func (r *CommentRatingsRepository) UpdateCommentRating(
 
 	db := r.dbFromContext(ctx)
 
-	query := `
-		UPDATE debatesApp.comment_ratings
-		SET
-			score = $1,
-			version = version + 1,
-			updated_at = $2
-		WHERE id = $3
-		  AND version = $4
-		RETURNING
-			id,
-			version,
-			comment_id,
-			user_id,
-			score,
-			created_at,
-			updated_at
-	`
-
 	var result domain.CommentRating
 
 	err := db.QueryRow(
 		ctx,
-		query,
+		updateCommentRatingQuery,
 		rating.Rating,
 		rating.UpdatedAt,
 		rating.ID,

@@ -11,6 +11,25 @@ import (
 	core_postgres_pool "github.com/qandoni/debatesApp/internal/core/repository/postgres/pool"
 )
 
+const getByIDQuery = `
+SELECT id, post_id, status, end_at, created_at, finished_at, winner_side_id
+FROM debatesApp.debates
+WHERE id = $1
+`
+
+const getByPostIDQuery = `
+SELECT id, post_id, status, end_at, created_at, finished_at, winner_side_id
+FROM debatesApp.debates
+WHERE post_id = $1;
+`
+
+const getAuthorIDQuery = `
+SELECT p.author_id
+FROM debatesApp.debates d
+JOIN debatesApp.posts p ON p.id = d.post_id
+WHERE d.id = $1
+`
+
 func (r *DebatesRepository) GetByID(
 	ctx context.Context,
 	debateID int,
@@ -18,14 +37,8 @@ func (r *DebatesRepository) GetByID(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `
-SELECT id, post_id, status, end_at, created_at, finished_at, winner_side_id
-FROM debatesApp.debates
-WHERE id = $1
-`
-
 	db := r.dbFromContext(ctx)
-	row := db.QueryRow(ctx, query, debateID)
+	row := db.QueryRow(ctx, getByIDQuery, debateID)
 	var debateModel DebateModel
 
 	err := row.Scan(
@@ -63,14 +76,8 @@ func (r *DebatesRepository) GetByPostID(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `
-SELECT id, post_id, status, end_at, created_at, finished_at, winner_side_id
-FROM debatesApp.debates
-WHERE post_id = $1;
-`
-
 	db := r.dbFromContext(ctx)
-	row := db.QueryRow(ctx, query, postID)
+	row := db.QueryRow(ctx, getByPostIDQuery, postID)
 	var debateModel DebateModel
 
 	err := row.Scan(
@@ -109,18 +116,11 @@ func (r *DebatesRepository) GetAuthorID(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `
-SELECT p.author_id
-FROM debatesApp.debates d
-JOIN debatesApp.posts p ON p.id = d.post_id
-WHERE d.id = $1
-`
-
 	db := r.dbFromContext(ctx)
 
 	var authorID int
 
-	err := db.QueryRow(ctx, query, debateID).Scan(&authorID)
+	err := db.QueryRow(ctx, getAuthorIDQuery, debateID).Scan(&authorID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, core_errors.ErrNotFound

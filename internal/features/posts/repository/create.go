@@ -7,6 +7,11 @@ import (
 	"github.com/qandoni/debatesApp/internal/core/domain"
 )
 
+const createPostQuery = `INSERT INTO debatesApp.posts(author_id, content, is_debate, created_at)
+VALUES($1, $2, $3, $4)
+RETURNING id, version, author_id, content, is_debate, created_at, updated_at, deleted_at;
+`
+
 func (r *PostsRepository) CreatePost(
 	ctx context.Context,
 	post domain.Post,
@@ -14,15 +19,10 @@ func (r *PostsRepository) CreatePost(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `INSERT INTO debatesApp.posts(author_id, content, is_debate, created_at)
-VALUES($1, $2, $3, $4)
-RETURNING id, version, author_id, content, is_debate, created_at, updated_at, deleted_at;
-`
-
 	db := r.dbFromContext(ctx)
 	row := db.QueryRow(
 		ctx,
-		query,
+		createPostQuery,
 		post.AuthorID,
 		post.Content,
 		post.IsDebate,

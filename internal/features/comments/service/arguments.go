@@ -80,19 +80,6 @@ func (s *CommentsService) GetArgumentsWithReplies(
 	limit *int,
 	offset *int,
 ) ([]domain.CommentWithRating, []domain.Comment, error) {
-	if limit != nil && *limit < 0 {
-		return nil, nil, fmt.Errorf(
-			"limit must be non-negative: %w",
-			core_errors.ErrInvalidArgument,
-		)
-	}
-	if offset != nil && *offset < 0 {
-		return nil, nil, fmt.Errorf(
-			"offset must be non-negative: %w",
-			core_errors.ErrInvalidArgument,
-		)
-	}
-
 	arguments, err := s.commentsRepository.GetArgumentsWithReplies(
 		ctx,
 		postID,

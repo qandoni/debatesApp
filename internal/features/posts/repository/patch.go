@@ -11,16 +11,7 @@ import (
 	core_postgres_pool "github.com/qandoni/debatesApp/internal/core/repository/postgres/pool"
 )
 
-func (r *PostsRepository) PatchPost(
-	ctx context.Context,
-	userID int,
-	postID int,
-	postPatch domain.PostPatch,
-) (domain.Post, error) {
-	ctx, cancel := context.WithTimeout(ctx, r.timeout)
-	defer cancel()
-
-	query := `
+const patchPostQuery = `
 UPDATE debatesApp.posts
 SET 
 	content=$1,
@@ -40,10 +31,19 @@ RETURNING
 	deleted_at;
 `
 
+func (r *PostsRepository) PatchPost(
+	ctx context.Context,
+	userID int,
+	postID int,
+	postPatch domain.PostPatch,
+) (domain.Post, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
 	db := r.dbFromContext(ctx)
 	row := db.QueryRow(
 		ctx,
-		query,
+		patchPostQuery,
 		*postPatch.Content.Value,
 		time.Now(),
 		postID,

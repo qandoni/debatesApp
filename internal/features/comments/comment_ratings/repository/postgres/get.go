@@ -10,6 +10,20 @@ import (
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
 )
 
+const getByCommentAndUserQuery = `
+SELECT
+	id,
+	version,
+	comment_id,
+	user_id,
+	score,
+	created_at,
+	updated_at
+FROM debatesApp.comment_ratings
+WHERE comment_id = $1
+  AND user_id = $2
+`
+
 func (r *CommentRatingsRepository) GetByCommentAndUser(
 	ctx context.Context,
 	commentID int,
@@ -20,25 +34,11 @@ func (r *CommentRatingsRepository) GetByCommentAndUser(
 
 	db := r.dbFromContext(ctx)
 
-	query := `
-		SELECT
-			id,
-			version,
-			comment_id,
-			user_id,
-			score,
-			created_at,
-			updated_at
-		FROM debatesApp.comment_ratings
-		WHERE comment_id = $1
-		  AND user_id = $2
-	`
-
 	var rating domain.CommentRating
 
 	err := db.QueryRow(
 		ctx,
-		query,
+		getByCommentAndUserQuery,
 		commentID,
 		userID,
 	).Scan(

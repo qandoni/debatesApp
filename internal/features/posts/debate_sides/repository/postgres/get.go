@@ -7,6 +7,13 @@ import (
 	"github.com/qandoni/debatesApp/internal/core/domain"
 )
 
+const getByDebateIDQuery = `
+SELECT id, debate_id, name, description, display_order
+FROM debatesApp.debate_sides
+WHERE debate_id=$1
+ORDER BY display_order ASC;
+`
+
 func (r *DebateSidesRepository) GetByDebateID(
 	ctx context.Context,
 	debateID int,
@@ -14,15 +21,8 @@ func (r *DebateSidesRepository) GetByDebateID(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `
-SELECT id, debate_id, name, description, display_order
-FROM debatesApp.debate_sides
-WHERE debate_id=$1
-ORDER BY display_order ASC;
-`
-
 	db := r.dbFromContext(ctx)
-	rows, err := db.Query(ctx, query, debateID)
+	rows, err := db.Query(ctx, getByDebateIDQuery, debateID)
 	if err != nil {
 		return []domain.DebateSide{}, fmt.Errorf("select debate sides: %w", err)
 	}

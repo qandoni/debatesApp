@@ -10,6 +10,26 @@ import (
 	core_postgres_pool "github.com/qandoni/debatesApp/internal/core/repository/postgres/pool"
 )
 
+const updateDebateVoteQuery = `
+UPDATE debatesApp.debate_votes
+SET
+	debate_side_id = $1,
+	updated_at = $2,
+	is_changed = $3,
+	version = version + 1
+WHERE id = $4
+  AND version = $5
+RETURNING
+	id,
+	version,
+	debate_id,
+	user_id,
+	debate_side_id,
+	created_at,
+	updated_at,
+	is_changed
+`
+
 func (r *DebateVotesRepository) Update(
 	ctx context.Context,
 	vote domain.DebateVote,
@@ -17,31 +37,11 @@ func (r *DebateVotesRepository) Update(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `
-		UPDATE debatesApp.debate_votes
-		SET
-			debate_side_id = $1,
-			updated_at = $2,
-			is_changed = $3,
-			version = version + 1
-		WHERE id = $4
-		  AND version = $5
-		RETURNING
-			id,
-			version,
-			debate_id,
-			user_id,
-			debate_side_id,
-			created_at,
-			updated_at,
-			is_changed
-	`
-
 	db := r.dbFromContext(ctx)
 
 	row := db.QueryRow(
 		ctx,
-		query,
+		updateDebateVoteQuery,
 		vote.DebateSideID,
 		vote.UpdatedAt,
 		vote.IsChanged,

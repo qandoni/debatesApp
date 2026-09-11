@@ -7,6 +7,12 @@ import (
 	"github.com/qandoni/debatesApp/internal/core/domain"
 )
 
+const createDebateSideQuery = `
+INSERT INTO debatesApp.debate_sides(debate_id, name, description, display_order)
+VALUES($1, $2, $3, $4)
+RETURNING id, debate_id, name, description, display_order
+`
+
 func (r *DebateSidesRepository) CreateDebateSide(
 	ctx context.Context,
 	side domain.DebateSide,
@@ -14,14 +20,8 @@ func (r *DebateSidesRepository) CreateDebateSide(
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	query := `
-INSERT INTO debatesApp.debate_sides(debate_id, name, description, display_order)
-VALUES($1, $2, $3, $4)
-RETURNING id, debate_id, name, description, display_order
-`
-
 	db := r.dbFromContext(ctx)
-	row := db.QueryRow(ctx, query, side.DebateID, side.Name, side.Description, side.DisplayOrder)
+	row := db.QueryRow(ctx, createDebateSideQuery, side.DebateID, side.Name, side.Description, side.DisplayOrder)
 	var debateSideModel DebateSideModel
 
 	err := row.Scan(

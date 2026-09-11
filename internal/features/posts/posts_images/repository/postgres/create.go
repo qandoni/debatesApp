@@ -7,14 +7,7 @@ import (
 	"github.com/qandoni/debatesApp/internal/core/domain"
 )
 
-func (r *PostImagesRepository) CreatePostImage(
-	ctx context.Context,
-	image domain.PostImage,
-) (domain.PostImage, error) {
-	ctx, cancel := context.WithTimeout(ctx, r.timeout)
-	defer cancel()
-
-	query := `
+const createPostImageQuery = `
 INSERT INTO debatesApp.post_images(post_id, image_url, display_order, created_at)
 VALUES($1, $2, $3, $4)
 RETURNING
@@ -24,8 +17,16 @@ RETURNING
 	display_order,
 	created_at;
 `
+
+func (r *PostImagesRepository) CreatePostImage(
+	ctx context.Context,
+	image domain.PostImage,
+) (domain.PostImage, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
 	db := r.dbFromContext(ctx)
-	row := db.QueryRow(ctx, query, image.PostID, image.ImageURL, image.DisplayOrder, image.CreatedAt)
+	row := db.QueryRow(ctx, createPostImageQuery, image.PostID, image.ImageURL, image.DisplayOrder, image.CreatedAt)
 	var postImagesModel PostImagesModel
 	err := row.Scan(
 		&postImagesModel.ID,

@@ -36,9 +36,24 @@ func GetLimitOffsetQueryParams(c *gin.Context) (*int, *int, error) {
 		return nil, nil, fmt.Errorf("get 'limit' query param: %w", err)
 	}
 
+	if limit != nil && *limit < 0 {
+		return nil, nil, fmt.Errorf(
+			"limit must be non-negative: %w",
+			core_errors.ErrInvalidArgument,
+		)
+	}
+
 	offset, err := GetIntQueryParam(c, offsetQueryParamKey)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get 'offset' query param: %w", err)
 	}
+
+	if offset != nil && *offset < 0 {
+		return nil, nil, fmt.Errorf(
+			"offset must be non-negative: %w",
+			core_errors.ErrInvalidArgument,
+		)
+	}
+
 	return limit, offset, nil
 }

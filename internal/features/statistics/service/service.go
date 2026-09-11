@@ -48,6 +48,5 @@ type DebatesRepository interface {
 	FinishDebate(
 		ctx context.Context,
 		debateID int,
-		winnerSideID *int,
 	) error
 }
