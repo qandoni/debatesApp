@@ -2,6 +2,7 @@ package comments_service
 
 import (
 	"context"
+	"time"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_postgres "github.com/qandoni/debatesApp/internal/core/repository/postgres"
@@ -43,7 +44,13 @@ type DebateVotesRepository interface {
 		userID int,
 	) (domain.DebateVote, error)
 
-	Update(ctx context.Context, vote domain.DebateVote) (domain.DebateVote, error)
+	Update(
+		ctx context.Context,
+		debateID int,
+		userID int,
+		debateSideID int,
+		updatedAt time.Time,
+	) (domain.DebateVote, error)
 }
 
 type DebateSidesRepository interface {

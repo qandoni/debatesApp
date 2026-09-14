@@ -69,18 +69,12 @@ func (s *AvatarService) UploadAvatar(
 		return fmt.Errorf("get avatar url: %w", err)
 	}
 
-	oldAvatarURL, err := s.usersRepository.GetAvatarURL(ctx, userID)
-	if err != nil {
-		_ = s.storage.Delete(ctx, objectName)
-
-		return fmt.Errorf("get old avatar url: %w", err)
-	}
-
-	if err := s.usersRepository.UpdateAvatarURL(
+	oldAvatarURL, err := s.usersRepository.UpdateAvatarURL(
 		ctx,
 		userID,
 		avatarURL,
-	); err != nil {
+	)
+	if err != nil {
 		_ = s.storage.Delete(ctx, objectName)
 
 		return fmt.Errorf("update avatar url: %w", err)

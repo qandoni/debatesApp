@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
@@ -15,10 +16,12 @@ UPDATE debatesApp.debate_votes
 SET
 	debate_side_id = $1,
 	updated_at = $2,
-	is_changed = $3,
+	is_changed = true,
 	version = version + 1
-WHERE id = $4
-  AND version = $5
+WHERE debate_id = $3
+  AND user_id = $4
+  AND is_changed = false
+  AND debate_side_id != $1
 RETURNING
 	id,
 	version,
@@ -32,7 +35,10 @@ RETURNING
 
 func (r *DebateVotesRepository) Update(
 	ctx context.Context,
-	vote domain.DebateVote,
+	debateID int,
+	userID int,
+	debateSideID int,
+	updatedAt time.Time,
 ) (domain.DebateVote, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
@@ -42,11 +48,10 @@ func (r *DebateVotesRepository) Update(
 	row := db.QueryRow(
 		ctx,
 		updateDebateVoteQuery,
-		vote.DebateSideID,
-		vote.UpdatedAt,
-		vote.IsChanged,
-		vote.ID,
-		vote.Version,
+		debateSideID,
+		updatedAt,
+		debateID,
+		userID,
 	)
 
 	var model DebateVoteModel
@@ -64,8 +69,9 @@ func (r *DebateVotesRepository) Update(
 	if err != nil {
 		if errors.Is(err, core_postgres_pool.ErrNoRows) {
 			return domain.DebateVote{}, fmt.Errorf(
-				"vote with id='%d' concurrently accessed: %w",
-				vote.ID,
+				"vote for debate id='%d' and user id='%d' cannot be changed: %w",
+				debateID,
+				userID,
 				core_errors.ErrConflict,
 			)
 		}

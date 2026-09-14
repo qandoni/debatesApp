@@ -34,12 +34,19 @@ RETURNING
 `
 
 const updateAvatarURLQuery = `
+WITH old_avatar AS (
+	SELECT avatar_url
+	FROM debatesApp.users
+	WHERE id = $3
+)
 UPDATE debatesApp.users
 SET
 	avatar_url=$1,
 	updated_at=$2,
 	version=version+1
-WHERE id=$3;
+WHERE id=$3
+RETURNING
+	(SELECT avatar_url FROM old_avatar) AS old_avatar_url
 `
 
 func (r *UsersRepository) EditProfile(ctx context.Context, userID int, user domain.User) (domain.User, error) {
@@ -96,22 +103,24 @@ func (r *UsersRepository) UpdateAvatarURL(
 	ctx context.Context,
 	userID int,
 	avatarURL string,
-) error {
+) (*string, error) {
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
 	db := r.dbFromContext(ctx)
 
-	_, err := db.Exec(
+	var oldAvatarURL *string
+
+	err := db.QueryRow(
 		ctx,
 		updateAvatarURLQuery,
 		avatarURL,
 		time.Now(),
 		userID,
-	)
+	).Scan(&oldAvatarURL)
 	if err != nil {
-		return fmt.Errorf("update avatar url: %w", err)
+		return nil, fmt.Errorf("update avatar url: %w", err)
 	}
 
-	return nil
+	return oldAvatarURL, nil
 }
