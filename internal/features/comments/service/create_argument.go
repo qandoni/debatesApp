@@ -5,8 +5,6 @@ import (
 	"fmt"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
-	core_enum "github.com/qandoni/debatesApp/internal/core/enum"
-	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
 )
 
 func (s *CommentsService) CreateArgument(
@@ -16,47 +14,8 @@ func (s *CommentsService) CreateArgument(
 	debateSideID int,
 	content string,
 ) (domain.Comment, error) {
-	_, err := s.postsRepository.GetPost(ctx, postID)
-	if err != nil {
-		return domain.Comment{}, fmt.Errorf(
-			"get post: %w",
-			err,
-		)
-	}
-
-	debate, err := s.debatesRepository.GetByPostID(ctx, postID)
-	if err != nil {
-		return domain.Comment{}, fmt.Errorf("get debate: %w", err)
-	}
-	if debate.Status != core_enum.DebateStatusOpen {
-		return domain.Comment{}, fmt.Errorf("debates are closed: %w", core_errors.ErrConflict)
-	}
-	sides, err := s.debateSidesRepository.GetByDebateID(ctx, debate.ID)
-	if err != nil {
-		return domain.Comment{}, fmt.Errorf(
-			"get debate sides: %w",
-			err,
-		)
-	}
-
-	var sideExists bool
-
-	for _, side := range sides {
-		if side.ID == debateSideID {
-			sideExists = true
-			break
-		}
-	}
-	if !sideExists {
-		return domain.Comment{}, core_errors.ErrNotFound
-	}
-
-	vote, err := s.debateVotesRepository.GetByDebateAndUser(ctx, debate.ID, userID)
-	if err != nil {
-		return domain.Comment{}, fmt.Errorf("get user vote: %w", err)
-	}
-	if vote.DebateSideID != debateSideID {
-		return domain.Comment{}, fmt.Errorf("user voted for other side: '%d': %w", vote.DebateSideID, core_errors.ErrConflict)
+	if err := s.validateArgumentCreation(ctx, userID, postID, debateSideID); err != nil {
+		return domain.Comment{}, err
 	}
 
 	argument := domain.NewCommentUninitialized(
