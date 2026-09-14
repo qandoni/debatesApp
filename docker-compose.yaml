@@ -24,7 +24,7 @@ services:
     networks:
       - default
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     container_name: debatesApp-minio
     restart: unless-stopped
     ports:
