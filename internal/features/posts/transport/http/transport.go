@@ -30,10 +30,13 @@ type ImagesService interface {
 		postID int,
 		files []*multipart.FileHeader,
 	) ([]domain.PostImage, error)
-	DeleteByPostID(
+	DeleteRecordsByPostID(
 		ctx context.Context,
-		userID int,
 		postID int,
+	) error
+	DeleteFromStorage(
+		ctx context.Context,
+		images []domain.PostImage,
 	) error
 }
 
@@ -98,5 +101,4 @@ func (h *PostImagesHTTPHandler) Register(rg *gin.RouterGroup) {
 	posts.Use(h.jwt)
 	posts.GET("/:id/images", h.GetByPostID)
 	posts.POST("/:id/images", h.CreatePostImages)
-	posts.DELETE("/:id/images", h.DeleteByPostID)
 }

@@ -25,10 +25,6 @@ type DebateVotesHTTPHandler struct {
 type DebateVotesService interface {
 	Vote(ctx context.Context, userID int, debateID int, debateSideID int) (domain.DebateVote, error)
 	ChangeVote(ctx context.Context, userID int, debateID int, debateSideID int) (domain.DebateVote, error)
-	CalculateWinner(
-		ctx context.Context,
-		debateID int,
-	) (*int, error)
 	FinishDebate(
 		ctx context.Context,
 		userID int,

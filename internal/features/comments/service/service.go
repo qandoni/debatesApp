@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
-	debate_votes_contracts "github.com/qandoni/debatesApp/internal/features/posts/debate_votes/contracts"
+	core_postgres "github.com/qandoni/debatesApp/internal/core/repository/postgres"
 )
 
 func NewCommentsService(
@@ -13,6 +13,7 @@ func NewCommentsService(
 	debatesRepository DebatesRepository,
 	debateSidesRepository DebateSidesRepository,
 	debateVotesRepository DebateVotesRepository,
+	txManager core_postgres.TransactionManager,
 ) *CommentsService {
 	return &CommentsService{
 		commentsRepository,
@@ -20,6 +21,7 @@ func NewCommentsService(
 		debatesRepository,
 		debateSidesRepository,
 		debateVotesRepository,
+		txManager,
 	}
 }
 
@@ -29,6 +31,7 @@ type CommentsService struct {
 	debatesRepository     DebatesRepository
 	debateSidesRepository DebateSidesRepository
 	debateVotesRepository DebateVotesRepository
+	txManager             core_postgres.TransactionManager
 }
 
 type DebateVotesRepository interface {
@@ -41,7 +44,6 @@ type DebateVotesRepository interface {
 	) (domain.DebateVote, error)
 
 	Update(ctx context.Context, vote domain.DebateVote) (domain.DebateVote, error)
-	GetResults(ctx context.Context, debateID int) ([]debate_votes_contracts.DebateVoteResult, error)
 }
 
 type DebateSidesRepository interface {
@@ -74,7 +76,6 @@ type DebatesRepository interface {
 	FinishDebate(
 		ctx context.Context,
 		debateID int,
-		winnerSideID *int,
 	) error
 	GetAuthorID(
 		ctx context.Context,

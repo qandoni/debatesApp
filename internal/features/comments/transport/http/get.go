@@ -29,6 +29,7 @@ func (h *CommentsHTTPHandler) GetComments(c *gin.Context) {
 	)
 	if err != nil {
 		c.Error(err).SetMeta("failed to get post")
+		return
 	}
 
 	response := comments_dto.BuildCommentTree(comments)

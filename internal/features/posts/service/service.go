@@ -83,15 +83,18 @@ type ImagesService interface {
 		postID int,
 		files []*multipart.FileHeader,
 	) ([]domain.PostImage, error)
-	DeleteByPostID(
+	DeleteRecordsByPostID(
 		ctx context.Context,
-		userID int,
 		postID int,
 	) error
 	GetByPostIDs(
 		ctx context.Context,
 		postIDs []int,
 	) (map[int][]domain.PostImage, error)
+	DeleteFromStorage(
+		ctx context.Context,
+		images []domain.PostImage,
+	) error
 }
 
 func NewPostsService(
