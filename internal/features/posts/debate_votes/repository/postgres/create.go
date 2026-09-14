@@ -2,9 +2,12 @@ package debate_votes_repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
+	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
+	core_postgres_pool "github.com/qandoni/debatesApp/internal/core/repository/postgres/pool"
 )
 
 const createDebateVoteQuery = `
@@ -17,6 +20,7 @@ INSERT INTO debatesApp.debate_votes (
 	is_changed
 )
 VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (debate_id, user_id) DO NOTHING
 RETURNING
 	id,
 	version,
@@ -61,6 +65,14 @@ func (r *DebateVotesRepository) Create(
 		&model.IsChanged,
 	)
 	if err != nil {
+		if errors.Is(err, core_postgres_pool.ErrNoRows) {
+			return domain.DebateVote{}, fmt.Errorf(
+				"user already voted in debate id='%d': %w",
+				vote.DebateID,
+				core_errors.ErrConflict,
+			)
+		}
+
 		return domain.DebateVote{}, fmt.Errorf("scan error: %w", err)
 	}
 

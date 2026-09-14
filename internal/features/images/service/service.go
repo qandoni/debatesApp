@@ -75,9 +75,5 @@ type UsersRepository interface {
 		ctx context.Context,
 		userID int,
 		avatarURL string,
-	) error
-	GetAvatarURL(
-		ctx context.Context,
-		userID int,
 	) (*string, error)
 }

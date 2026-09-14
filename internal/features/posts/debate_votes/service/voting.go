@@ -2,7 +2,6 @@ package debate_votes_service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -24,27 +23,6 @@ func (s *DebateVotesService) Vote(
 
 	if err := s.validateDebateSide(ctx, debateID, debateSideID); err != nil {
 		return domain.DebateVote{}, err
-	}
-
-	_, err := s.debateVotesRepository.GetByDebateAndUser(
-		ctx,
-		debateID,
-		userID,
-	)
-
-	if err == nil {
-		return domain.DebateVote{}, fmt.Errorf(
-			"user id='%d' has already voted in debate id='%d'",
-			userID,
-			debateID,
-		)
-	}
-
-	if !errors.Is(err, core_errors.ErrNotFound) {
-		return domain.DebateVote{}, fmt.Errorf(
-			"get existing vote: %w",
-			err,
-		)
 	}
 
 	vote := domain.NewDebateVote(
@@ -85,37 +63,6 @@ func (s *DebateVotesService) ChangeVote(
 		return domain.DebateVote{}, err
 	}
 
-	vote, err := s.debateVotesRepository.GetByDebateAndUser(
-		ctx,
-		debateID,
-		userID,
-	)
-
-	if err != nil {
-		if errors.Is(err, core_errors.ErrNotFound) {
-			return domain.DebateVote{}, fmt.Errorf(
-				"user id='%d' has not voted in debate id='%d': %w",
-				userID,
-				debateID,
-				core_errors.ErrAccessForbidden,
-			)
-		}
-
-		return domain.DebateVote{}, fmt.Errorf(
-			"get debate vote: %w",
-			err,
-		)
-	}
-
-	if vote.IsChanged {
-		return domain.DebateVote{}, fmt.Errorf(
-			"user id='%d' has already changed vote in debate id='%d': %w",
-			userID,
-			debateID,
-			core_errors.ErrAccessForbidden,
-		)
-	}
-
 	hasArgument, err := s.commentsRepository.HasUserArgumentInPost(ctx, userID, debate.PostID)
 	if err != nil {
 		return domain.DebateVote{}, fmt.Errorf("failed to check if user have argument in this post already: %w", err)
@@ -129,22 +76,13 @@ func (s *DebateVotesService) ChangeVote(
 		)
 	}
 
-	if vote.DebateSideID == debateSideID {
-		return domain.DebateVote{}, fmt.Errorf(
-			"user id='%d' already votes for debate side id='%d': %w",
-			userID,
-			debateSideID,
-			core_errors.ErrAccessForbidden,
-		)
-	}
-
-	now := time.Now()
-
-	vote.DebateSideID = debateSideID
-	vote.UpdatedAt = &now
-	vote.IsChanged = true
-
-	updatedVote, err := s.debateVotesRepository.Update(ctx, vote)
+	updatedVote, err := s.debateVotesRepository.Update(
+		ctx,
+		debateID,
+		userID,
+		debateSideID,
+		time.Now(),
+	)
 	if err != nil {
 		return domain.DebateVote{}, fmt.Errorf(
 			"update debate vote: %w",
