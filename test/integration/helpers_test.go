@@ -138,7 +138,6 @@ func uniqueEmail() string {
 	return fmt.Sprintf("user_%d_%d@test.it", time.Now().UnixNano(), fixtureSeq)
 }
 
-// createUser создаёт пользователя напрямую через репозиторий.
 func createUser(t *testing.T) domain.User {
 	t.Helper()
 
@@ -155,7 +154,6 @@ func createUser(t *testing.T) domain.User {
 	return user
 }
 
-// createRegularPost создаёт обычный пост (не дебат).
 func createRegularPost(t *testing.T, authorID int) domain.Post {
 	t.Helper()
 
@@ -170,7 +168,6 @@ func createRegularPost(t *testing.T, authorID int) domain.Post {
 	return post
 }
 
-// createDebatePost создаёт пост-дебат с указанным числом сторон.
 func createDebatePost(t *testing.T, authorID int, sidesCount int) domain.Post {
 	t.Helper()
 
@@ -198,7 +195,6 @@ func createDebatePost(t *testing.T, authorID int, sidesCount int) domain.Post {
 	return post
 }
 
-// mustVote голосует и падает, если голосование не удалось.
 func mustVote(t *testing.T, userID, debateID, sideID int) domain.DebateVote {
 	t.Helper()
 
@@ -209,7 +205,6 @@ func mustVote(t *testing.T, userID, debateID, sideID int) domain.DebateVote {
 	return vote
 }
 
-// createArgument создаёт аргумент (корневой комментарий с стороной дебата).
 func createArgument(t *testing.T, userID, postID, sideID int) domain.Comment {
 	t.Helper()
 
@@ -220,7 +215,6 @@ func createArgument(t *testing.T, userID, postID, sideID int) domain.Comment {
 	return comment
 }
 
-// createReply создаёт ответ на комментарий.
 func createReply(t *testing.T, userID int, parent domain.Comment) domain.Comment {
 	t.Helper()
 
@@ -232,7 +226,6 @@ func createReply(t *testing.T, userID int, parent domain.Comment) domain.Comment
 	return comment
 }
 
-// finishDebate завершает дебат от имени автора поста.
 func finishDebate(t *testing.T, authorID, debateID int) {
 	t.Helper()
 
@@ -241,10 +234,6 @@ func finishDebate(t *testing.T, authorID, debateID int) {
 	}
 }
 
-// ---- Хелперы конкурентности ----
-
-// startGate синхронизирует старт N горутин: все блокируются на канале
-// и стартуют одновременно, чтобы максимизировать окно гонки.
 type startGate struct {
 	ch chan struct{}
 }
@@ -257,7 +246,6 @@ func (g *startGate) wait() { <-g.ch }
 
 func (g *startGate) open() { close(g.ch) }
 
-// isConflict сообщает, является ли ошибкой конфликта (уникальность/версия).
 func isConflict(err error) bool {
 	return err != nil && is(err, core_errors.ErrConflict)
 }
@@ -289,7 +277,6 @@ func is(err, target error) bool {
 	return false
 }
 
-// countVotes возвращает число голосов в дебате напрямую из БД.
 func countVotes(t *testing.T, debateID int) int {
 	t.Helper()
 	var n int
@@ -301,7 +288,6 @@ func countVotes(t *testing.T, debateID int) int {
 	return n
 }
 
-// countCommentRatings возвращает число оценок комментария напрямую из БД.
 func countCommentRatings(t *testing.T, commentID int) int {
 	t.Helper()
 	var n int
@@ -313,7 +299,6 @@ func countCommentRatings(t *testing.T, commentID int) int {
 	return n
 }
 
-// countUsersByEmail возвращает число пользователей с данным email.
 func countUsersByEmail(t *testing.T, email string) int {
 	t.Helper()
 	var n int
@@ -325,7 +310,6 @@ func countUsersByEmail(t *testing.T, email string) int {
 	return n
 }
 
-// getVoteRaw читает голос пользователя напрямую из БД.
 func getVoteRaw(t *testing.T, debateID, userID int) (sideID int, isChanged bool, version int) {
 	t.Helper()
 	err := itPool.QueryRow(context.Background(),
@@ -337,7 +321,6 @@ func getVoteRaw(t *testing.T, debateID, userID int) (sideID int, isChanged bool,
 	return sideID, isChanged, version
 }
 
-// getDebateRaw читает статус и победителя дебата напрямую из БД.
 func getDebateRaw(t *testing.T, debateID int) (status string, winnerSideID *int) {
 	t.Helper()
 	err := itPool.QueryRow(context.Background(),
@@ -349,7 +332,6 @@ func getDebateRaw(t *testing.T, debateID int) (status string, winnerSideID *int)
 	return status, winnerSideID
 }
 
-// postExists проверяет наличие поста в БД.
 func postExists(t *testing.T, postID int) bool {
 	t.Helper()
 	var exists bool
