@@ -170,9 +170,9 @@ func TestEditProfile_OptimisticLocking_Concurrent(t *testing.T) {
 		return func(ctx context.Context) {
 			_, err := itUsersService.EditProfile(ctx, user.ID, domain.NewUserPatch(
 				domain.Nullable[string]{Value: &name, Set: true},
-				domain.Nullable[string]{}, // email не меняем
-				domain.Nullable[string]{}, // пароль не меняем
-				domain.Nullable[string]{}, // bio не меняем
+				domain.Nullable[string]{},
+				domain.Nullable[string]{},
+				domain.Nullable[string]{},
 			))
 			results <- err
 		}

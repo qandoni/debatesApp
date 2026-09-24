@@ -1,12 +1,3 @@
-// Package integration содержит интеграционные тесты, покрывающие места,
-// которые юнит-тесты на моках защитить не могут: реальные SQL-ограничения,
-// транзакции, оптимистичные блокировки и гонки между конкурентными запросами.
-//
-// Тесты требуют запущенный Postgres (docker compose: make env-up && make env-port-forward).
-// Параметры подключения берутся из переменных окружения TEST_POSTGRES_*,
-// при их отсутствии — из POSTGRES_* (как в .env), иначе из дефолтов локальной среды.
-//
-// Запуск: make test-integration
 package integration_test
 
 import (
@@ -36,8 +27,6 @@ type postgresEnv struct {
 	Database string
 }
 
-// loadPostgresEnv читает конфигурацию тестовой БД.
-// Приоритет: TEST_POSTGRES_* -> POSTGRES_* -> дефолты локальной среды разработки.
 func loadPostgresEnv() postgresEnv {
 	get := func(testKey, appKey, fallback string) string {
 		if v := os.Getenv(testKey); v != "" {
@@ -73,8 +62,6 @@ func runMain(m *testing.M) int {
 	env := loadPostgresEnv()
 	ctx := context.Background()
 
-	// Уникальная тестовая БД на прогон: полная изоляция от боевой/дев-БД
-	// и от параллельных прогонов.
 	itDBName = fmt.Sprintf("debates_it_%d", time.Now().UnixNano()%1_000_000_000)
 
 	admin, err := connectRaw(ctx, env.dsn(env.Database))
@@ -92,7 +79,7 @@ func runMain(m *testing.M) int {
 	code := 0
 	func() {
 		defer func() {
-			// Гасим оставшиеся соединения и удаляем тестовую БД.
+
 			dropCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			_, _ = admin.Exec(dropCtx,
@@ -134,7 +121,6 @@ func runMain(m *testing.M) int {
 	return code
 }
 
-// applyMigrations применяет *.up.sql из каталога migrations в порядке нумерации.
 func applyMigrations(ctx context.Context, pool *core_pgx_pool.Pool) error {
 	dir := os.Getenv("TEST_MIGRATIONS_DIR")
 	if dir == "" {
@@ -170,8 +156,6 @@ func mustCWD() string {
 	return cwd
 }
 
-// connectRaw — прямое pgx-соединение для административных операций
-// (CREATE/DROP DATABASE), минуя пул приложения.
 func connectRaw(ctx context.Context, dsn string) (*pgxConn, error) {
 	return newPgxConn(ctx, dsn)
 }
