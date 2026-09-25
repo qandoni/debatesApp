@@ -87,9 +87,6 @@ func main() {
 		fmt.Println("ensure minio bucket:", err)
 	}
 
-	if err := storage.SetPublicReadPolicy(ctx); err != nil {
-		fmt.Println("set public read policy:", err)
-	}
 	logger.Debug("initializing feature", zap.String("feature", "users"))
 	passwordHasher := core_password.NewBcryptHasher()
 	usersRepository := users_repository.NewUsersRepository(pool, pool.OpTimeout())
