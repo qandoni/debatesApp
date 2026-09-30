@@ -31,6 +31,8 @@ func NewClient(
 	config Config,
 	log *core_logger.Logger,
 ) *Client {
+	conn.SetReadLimit(config.ReadLimit)
+
 	return &Client{
 		conn:   conn,
 		hub:    hub,
@@ -74,7 +76,6 @@ func (c *Client) Send(payload []byte) {
 func (c *Client) close() {
 	c.once.Do(func() {
 		close(c.done)
-		_ = c.conn.Close()
 		c.hub.UnsubscribeAll(c)
 	})
 }
@@ -134,6 +135,10 @@ func (c *Client) readPump() {
 			return
 		}
 
+		if err := c.conn.SetReadDeadline(time.Now().Add(c.config.PongWait)); err != nil {
+			return
+		}
+
 		switch message.Type {
 		case MessageTypeSubscribe:
 			c.handleSubscribe(message.Data)
@@ -141,6 +146,8 @@ func (c *Client) readPump() {
 			c.handleUnsubscribe(message.Data)
 		case MessageTypePing:
 			c.Send(mustMarshalServerMessage(MessageTypePong, nil))
+		case MessageTypeAuth:
+			c.Send(errorFrame("invalid_argument", "already authenticated"))
 		default:
 			c.Send(errorFrame("invalid_argument", "unknown message type"))
 		}
@@ -196,25 +203,52 @@ func (c *Client) writePump() {
 	ticker := time.NewTicker(c.config.PingPeriod)
 	defer func() {
 		ticker.Stop()
+		_ = c.conn.WriteControl(
+			websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+			time.Now().Add(c.config.WriteWait),
+		)
+		_ = c.conn.Close()
 		c.close()
 	}()
 
 	for {
 		select {
-		case <-c.done:
-			return
 		case payload := <-c.send:
-			_ = c.conn.SetWriteDeadline(time.Now().Add(c.config.WriteWait))
-			if err := c.conn.WriteMessage(websocket.TextMessage, payload); err != nil {
+			if err := c.writeFrame(websocket.TextMessage, payload); err != nil {
 				return
 			}
 		case <-ticker.C:
-			if err := c.conn.WriteControl(
-				websocket.PingMessage, nil,
-				time.Now().Add(c.config.WriteWait),
-			); err != nil {
+			if err := c.writeFrame(websocket.PingMessage, nil); err != nil {
 				return
 			}
+		case <-c.done:
+			c.drain()
+			return
+		}
+	}
+}
+
+func (c *Client) writeFrame(messageType int, payload []byte) error {
+	if err := c.conn.SetWriteDeadline(time.Now().Add(c.config.WriteWait)); err != nil {
+		return err
+	}
+	return c.conn.WriteMessage(messageType, payload)
+}
+
+func (c *Client) drain() {
+	deadline := time.Now().Add(c.config.WriteWait)
+	for {
+		select {
+		case payload := <-c.send:
+			if deadline.Before(time.Now()) {
+				return
+			}
+			if err := c.writeFrame(websocket.TextMessage, payload); err != nil {
+				return
+			}
+		default:
+			return
 		}
 	}
 }
