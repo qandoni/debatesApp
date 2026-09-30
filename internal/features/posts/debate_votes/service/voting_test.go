@@ -9,6 +9,7 @@ import (
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_enum "github.com/qandoni/debatesApp/internal/core/enum"
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
+	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
 )
 
 type mockDebateVotesRepository struct {
@@ -108,7 +109,7 @@ func newTestService(
 	sides DebateSidesRepository,
 	comments CommentsRepository,
 ) *DebateVotesService {
-	return NewDebateVotesService(debateVotes, debates, sides, comments)
+	return NewDebateVotesService(debateVotes, debates, sides, comments, core_realtime.NewHub())
 }
 
 func TestVote_Success(t *testing.T) {

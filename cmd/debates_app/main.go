@@ -11,9 +11,11 @@ import (
 	core_logger "github.com/qandoni/debatesApp/internal/core/logger"
 	core_password "github.com/qandoni/debatesApp/internal/core/password"
 	core_password_hash "github.com/qandoni/debatesApp/internal/core/password/hash"
+	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
 	core_pgx_pool "github.com/qandoni/debatesApp/internal/core/repository/postgres/pool/pgx"
 	core_http_middleware "github.com/qandoni/debatesApp/internal/core/transport/http/middleware"
 	core_http_server "github.com/qandoni/debatesApp/internal/core/transport/http/server"
+	core_transport_websocket "github.com/qandoni/debatesApp/internal/core/transport/websocket"
 	auth_jwt "github.com/qandoni/debatesApp/internal/features/auth/jwt"
 	auth_service "github.com/qandoni/debatesApp/internal/features/auth/service"
 	auth_http_transport "github.com/qandoni/debatesApp/internal/features/auth/transport"
@@ -56,6 +58,8 @@ func main() {
 		os.Exit(1)
 	}
 	defer logger.Close()
+
+	realtimeHub := core_realtime.NewHub()
 
 	logger.Debug("initializing postgres connection pool")
 	pool, err := core_pgx_pool.NewPool(
@@ -110,12 +114,12 @@ func main() {
 	postImagesHTTPTransport := posts_http_transport.NewPostImagesHTTPHandler(imagesService, jwt)
 	debateVotesRepository := debate_votes_repository.NewDebateVotesRepository(pool, pool.OpTimeout())
 	commentsRepository := comments_repository.NewCommentsRepository(pool, pool.OpTimeout())
-	commentsService := comments_service.NewCommentsService(commentsRepository, postsRepository, debatesRepository, debatesSidesRepository, debateVotesRepository, txManager)
+	commentsService := comments_service.NewCommentsService(commentsRepository, postsRepository, debatesRepository, debatesSidesRepository, debateVotesRepository, txManager, realtimeHub)
 	commentsHTTPTransport := comments_transport_http.NewCommentsHTTPHandler(commentsService, jwt)
-	debateVotesService := debate_votes_service.NewDebateVotesService(debateVotesRepository, debatesRepository, debatesSidesRepository, commentsRepository)
+	debateVotesService := debate_votes_service.NewDebateVotesService(debateVotesRepository, debatesRepository, debatesSidesRepository, commentsRepository, realtimeHub)
 	debateVotesHTTPTransport := debate_votes_http_transport.NewDebateVotesHTTPTransport(debateVotesService, jwt)
 	commentRatingsRepository := comments_ratings_repository.NewCommentRatingsRepository(pool, pool.OpTimeout())
-	commentRatingsService := comment_ratings_service.NewCommentRatingsService(commentRatingsRepository, commentsRepository, debatesRepository)
+	commentRatingsService := comment_ratings_service.NewCommentRatingsService(commentRatingsRepository, commentsRepository, debatesRepository, realtimeHub)
 	commentRatingsHTTPHandler := comment_ratings_http_transport.NewCommentRatingsHTTPHandler(commentRatingsService, jwt)
 	statisticsRepository := statistics_repository.NewDebateStatisticsRepository(pool, pool.OpTimeout())
 	statisticsService := statistics_service.NewStatisticsService(statisticsRepository, debatesRepository)
@@ -134,6 +138,9 @@ func main() {
 		gin.Recovery(),
 		core_http_middleware.ErrorHandler(),
 	)
+
+	logger.Debug("initializing feature", zap.String("feature", "realtime"))
+	wsHandler := core_transport_websocket.NewHandler(realtimeHub, jwtManager, core_transport_websocket.NewConfigMust())
 	core_http_server.RegisterRoutes(
 		server.Engine(),
 		authTransportHTTP,
@@ -144,6 +151,7 @@ func main() {
 		commentsHTTPTransport,
 		commentRatingsHTTPHandler,
 		statisticsHTTPHandler,
+		wsHandler,
 	)
 	if err := server.Run(ctx); err != nil {
 		logger.Error(

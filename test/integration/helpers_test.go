@@ -11,6 +11,7 @@ import (
 
 	core_password "github.com/qandoni/debatesApp/internal/core/password"
 	core_password_hash "github.com/qandoni/debatesApp/internal/core/password/hash"
+	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	auth_service "github.com/qandoni/debatesApp/internal/features/auth/service"
@@ -94,13 +95,13 @@ func wireDependencies() {
 	itBcrypt = core_password.NewBcryptHasher()
 
 	itVotesService = debate_votes_service.NewDebateVotesService(
-		itVotesRepo, itDebatesRepo, itSidesRepo, itCommentsRepo,
+		itVotesRepo, itDebatesRepo, itSidesRepo, itCommentsRepo, core_realtime.NewHub(),
 	)
 	itCommentsService = comments_service.NewCommentsService(
-		itCommentsRepo, itPostsRepo, itDebatesRepo, itSidesRepo, itVotesRepo, itTxManager,
+		itCommentsRepo, itPostsRepo, itDebatesRepo, itSidesRepo, itVotesRepo, itTxManager, core_realtime.NewHub(),
 	)
 	itRatingsService = comment_ratings_service.NewCommentRatingsService(
-		itRatingsRepo, itCommentsRepo, itDebatesRepo,
+		itRatingsRepo, itCommentsRepo, itDebatesRepo, core_realtime.NewHub(),
 	)
 	itPostsService = posts_service.NewPostsService(
 		itPostsRepo, nopImagesService{}, itDebatesRepo, itSidesRepo, itTxManager,

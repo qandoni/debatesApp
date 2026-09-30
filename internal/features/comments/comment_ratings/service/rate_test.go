@@ -8,6 +8,7 @@ import (
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
+	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
 )
 
 type mockCommentRatingsRepository struct {
@@ -44,12 +45,31 @@ func (m *mockDebatesRepository) GetByPostID(ctx context.Context, postID int) (do
 	return m.getByPostFn(ctx, postID)
 }
 
+type publisherMock struct {
+	topics []string
+	events []core_realtime.Event
+}
+
+func (m *publisherMock) Publish(topic string, event core_realtime.Event) {
+	m.topics = append(m.topics, topic)
+	m.events = append(m.events, event)
+}
+
 func newRatingsService(
 	ratings CommentRatingsRepository,
 	comments CommentsRepository,
 	debates DebatesRepository,
 ) *CommentRatingsService {
-	return NewCommentRatingsService(ratings, comments, debates)
+	return newRatingsServiceWithPublisher(ratings, comments, debates, &publisherMock{})
+}
+
+func newRatingsServiceWithPublisher(
+	ratings CommentRatingsRepository,
+	comments CommentsRepository,
+	debates DebatesRepository,
+	publisher core_realtime.Publisher,
+) *CommentRatingsService {
+	return NewCommentRatingsService(ratings, comments, debates, publisher)
 }
 
 func openDebate() domain.Debate {

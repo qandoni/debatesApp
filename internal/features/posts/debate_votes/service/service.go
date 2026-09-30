@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
+	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
 )
 
 func NewDebateVotesService(
@@ -12,12 +13,14 @@ func NewDebateVotesService(
 	debatesRepository DebatesRepository,
 	debateSidesRepository DebateSidesRepository,
 	commentsRepository CommentsRepository,
+	realtimeHub core_realtime.Publisher,
 ) *DebateVotesService {
 	return &DebateVotesService{
 		debateVotesRepository,
 		debatesRepository,
 		debateSidesRepository,
 		commentsRepository,
+		realtimeHub,
 	}
 }
 
@@ -26,6 +29,7 @@ type DebateVotesService struct {
 	debatesRepository     DebatesRepository
 	debateSidesRepository DebateSidesRepository
 	commentsRepository    CommentsRepository
+	realtimeHub           core_realtime.Publisher
 }
 
 type CommentsRepository interface {

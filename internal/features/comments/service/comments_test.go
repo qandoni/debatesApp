@@ -9,6 +9,7 @@ import (
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_enum "github.com/qandoni/debatesApp/internal/core/enum"
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
+	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
 	core_postgres "github.com/qandoni/debatesApp/internal/core/repository/postgres"
 )
 
@@ -150,6 +151,16 @@ func (m *mockTxManager) WithinTransaction(ctx context.Context, fn func(ctx conte
 	return m.withinFn(ctx, fn)
 }
 
+type publisherMock struct {
+	topics []string
+	events []core_realtime.Event
+}
+
+func (m *publisherMock) Publish(topic string, event core_realtime.Event) {
+	m.topics = append(m.topics, topic)
+	m.events = append(m.events, event)
+}
+
 func newCommentsService(
 	comments CommentsRepository,
 	posts PostsRepository,
@@ -158,7 +169,27 @@ func newCommentsService(
 	votes DebateVotesRepository,
 	tx core_postgres.TransactionManager,
 ) *CommentsService {
-	return NewCommentsService(comments, posts, debates, sides, votes, tx)
+	return newCommentsServiceWithPublisher(
+		comments,
+		posts,
+		debates,
+		sides,
+		votes,
+		tx,
+		&publisherMock{},
+	)
+}
+
+func newCommentsServiceWithPublisher(
+	comments CommentsRepository,
+	posts PostsRepository,
+	debates DebatesRepository,
+	sides DebateSidesRepository,
+	votes DebateVotesRepository,
+	tx core_postgres.TransactionManager,
+	publisher core_realtime.Publisher,
+) *CommentsService {
+	return NewCommentsService(comments, posts, debates, sides, votes, tx, publisher)
 }
 
 func TestCreateComment_RegularPostNoParent(t *testing.T) {
