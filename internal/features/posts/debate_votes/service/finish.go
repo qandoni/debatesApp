@@ -6,6 +6,7 @@ import (
 
 	core_enum "github.com/qandoni/debatesApp/internal/core/enum"
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
+	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
 )
 
 func (s *DebateVotesService) FinishDebate(
@@ -32,5 +33,26 @@ func (s *DebateVotesService) FinishDebate(
 	if err := s.debatesRepository.FinishDebate(ctx, debateID); err != nil {
 		return fmt.Errorf("finish debate in repository: %w", err)
 	}
+
+	finishedDebate, err := s.debatesRepository.GetByID(ctx, debateID)
+	if err != nil {
+		// Запись уже прошла, поэтому не роняем операцию: сообщаем о финише
+		// без обогащения (winner_side_id будет null), а не отдаём ошибку
+		// на успешную запись.
+		s.publishEvent(
+			debate.PostID,
+			core_realtime.EventDebateFinished,
+			core_realtime.NewDebateFinishedData(debate, userID),
+		)
+
+		return nil
+	}
+
+	s.publishEvent(
+		finishedDebate.PostID,
+		core_realtime.EventDebateFinished,
+		core_realtime.NewDebateFinishedData(finishedDebate, userID),
+	)
+
 	return nil
 }

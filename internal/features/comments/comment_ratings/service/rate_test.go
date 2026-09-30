@@ -257,4 +257,162 @@ func TestRate_SameRatingReturnsExisting(t *testing.T) {
 	}
 }
 
+// assertSingleEvent проверяет, что сервис отправил ровно одно событие в нужный топик.
+func assertSingleEvent(
+	t *testing.T,
+	publisher *publisherMock,
+	topic string,
+	eventType string,
+) core_realtime.Event {
+	t.Helper()
+
+	if len(publisher.topics) != 1 || len(publisher.events) != 1 {
+		t.Fatalf(
+			"expected exactly one event, got topics=%v events=%v",
+			publisher.topics,
+			publisher.events,
+		)
+	}
+	if publisher.topics[0] != topic {
+		t.Fatalf("expected topic %q, got %q", topic, publisher.topics[0])
+	}
+	if publisher.events[0].Type != eventType {
+		t.Fatalf(
+			"expected event type %q, got %q",
+			eventType,
+			publisher.events[0].Type,
+		)
+	}
+
+	return publisher.events[0]
+}
+
+func TestRate_NewRatingEmitsRatingUpdated(t *testing.T) {
+	commentsRepo := &mockCommentsRepository{
+		getByIDFn: func(ctx context.Context, commentID int) (domain.Comment, error) {
+			return rootArgument(), nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByPostFn: func(ctx context.Context, postID int) (domain.Debate, error) {
+			return openDebate(), nil
+		},
+	}
+	ratingsRepo := &mockCommentRatingsRepository{
+		getFn: func(ctx context.Context, commentID, userID int) (domain.CommentRating, error) {
+			return domain.CommentRating{}, core_errors.ErrNotFound
+		},
+		createFn: func(ctx context.Context, rating domain.CommentRating) (domain.CommentRating, error) {
+			rating.ID = 1
+			return rating, nil
+		},
+	}
+	publisher := &publisherMock{}
+
+	svc := newRatingsServiceWithPublisher(ratingsRepo, commentsRepo, debatesRepo, publisher)
+
+	_, err := svc.Rate(context.Background(), 5, 1, 4)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	event := assertSingleEvent(
+		t,
+		publisher,
+		core_realtime.PostTopic(100),
+		core_realtime.EventArgumentRatingUpdated,
+	)
+
+	data, ok := event.Data.(core_realtime.RatingData)
+	if !ok {
+		t.Fatalf("expected RatingData, got %T", event.Data)
+	}
+	if data.CommentID != 1 || data.PostID != 100 || data.UserID != 5 || data.Score != 4 {
+		t.Fatalf("unexpected payload: %+v", data)
+	}
+	if !data.IsNew {
+		t.Fatalf("expected is_new=true for created rating, got: %+v", data)
+	}
+}
+
+func TestRate_ChangedRatingEmitsRatingUpdated(t *testing.T) {
+	commentsRepo := &mockCommentsRepository{
+		getByIDFn: func(ctx context.Context, commentID int) (domain.Comment, error) {
+			return rootArgument(), nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByPostFn: func(ctx context.Context, postID int) (domain.Debate, error) {
+			return openDebate(), nil
+		},
+	}
+	ratingsRepo := &mockCommentRatingsRepository{
+		getFn: func(ctx context.Context, commentID, userID int) (domain.CommentRating, error) {
+			return domain.CommentRating{ID: 1, CommentID: 1, UserID: 5, Rating: 2}, nil
+		},
+		updateFn: func(ctx context.Context, rating domain.CommentRating) (domain.CommentRating, error) {
+			return rating, nil
+		},
+	}
+	publisher := &publisherMock{}
+
+	svc := newRatingsServiceWithPublisher(ratingsRepo, commentsRepo, debatesRepo, publisher)
+
+	_, err := svc.Rate(context.Background(), 5, 1, 5)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	event := assertSingleEvent(
+		t,
+		publisher,
+		core_realtime.PostTopic(100),
+		core_realtime.EventArgumentRatingUpdated,
+	)
+
+	data, ok := event.Data.(core_realtime.RatingData)
+	if !ok {
+		t.Fatalf("expected RatingData, got %T", event.Data)
+	}
+	if data.CommentID != 1 || data.PostID != 100 || data.UserID != 5 || data.Score != 5 {
+		t.Fatalf("unexpected payload: %+v", data)
+	}
+	if data.IsNew {
+		t.Fatalf("expected is_new=false for updated rating, got: %+v", data)
+	}
+}
+
+func TestRate_SameRatingEmitsNothing(t *testing.T) {
+	commentsRepo := &mockCommentsRepository{
+		getByIDFn: func(ctx context.Context, commentID int) (domain.Comment, error) {
+			return rootArgument(), nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByPostFn: func(ctx context.Context, postID int) (domain.Debate, error) {
+			return openDebate(), nil
+		},
+	}
+	ratingsRepo := &mockCommentRatingsRepository{
+		getFn: func(ctx context.Context, commentID, userID int) (domain.CommentRating, error) {
+			return domain.CommentRating{ID: 1, CommentID: 1, UserID: 5, Rating: 3}, nil
+		},
+		updateFn: func(ctx context.Context, rating domain.CommentRating) (domain.CommentRating, error) {
+			t.Fatal("Update should not be called for same rating")
+			return domain.CommentRating{}, nil
+		},
+	}
+	publisher := &publisherMock{}
+
+	svc := newRatingsServiceWithPublisher(ratingsRepo, commentsRepo, debatesRepo, publisher)
+
+	_, err := svc.Rate(context.Background(), 5, 1, 3)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if len(publisher.topics) != 0 || len(publisher.events) != 0 {
+		t.Fatalf("expected no events, got topics=%v events=%v", publisher.topics, publisher.events)
+	}
+}
+
 var _ = time.Now

@@ -2,6 +2,7 @@ package debate_votes_service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -103,13 +104,39 @@ func finishedDebate(debateID, postID int) domain.Debate {
 	)
 }
 
+type publisherMock struct {
+	topics []string
+	events []core_realtime.Event
+}
+
+func (m *publisherMock) Publish(topic string, event core_realtime.Event) {
+	m.topics = append(m.topics, topic)
+	m.events = append(m.events, event)
+}
+
 func newTestService(
 	debateVotes DebateVotesRepository,
 	debates DebatesRepository,
 	sides DebateSidesRepository,
 	comments CommentsRepository,
 ) *DebateVotesService {
-	return NewDebateVotesService(debateVotes, debates, sides, comments, core_realtime.NewHub())
+	return newTestServiceWithPublisher(
+		debateVotes,
+		debates,
+		sides,
+		comments,
+		&publisherMock{},
+	)
+}
+
+func newTestServiceWithPublisher(
+	debateVotes DebateVotesRepository,
+	debates DebatesRepository,
+	sides DebateSidesRepository,
+	comments CommentsRepository,
+	publisher core_realtime.Publisher,
+) *DebateVotesService {
+	return NewDebateVotesService(debateVotes, debates, sides, comments, publisher)
 }
 
 func TestVote_Success(t *testing.T) {
@@ -363,5 +390,299 @@ func TestFinishDebate_AlreadyFinished(t *testing.T) {
 	err := svc.FinishDebate(context.Background(), 5, 10)
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+}
+
+// assertSingleEvent проверяет, что сервис отправил ровно одно событие в нужный топик.
+func assertSingleEvent(
+	t *testing.T,
+	publisher *publisherMock,
+	topic string,
+	eventType string,
+) core_realtime.Event {
+	t.Helper()
+
+	if len(publisher.topics) != 1 || len(publisher.events) != 1 {
+		t.Fatalf(
+			"expected exactly one event, got topics=%v events=%v",
+			publisher.topics,
+			publisher.events,
+		)
+	}
+	if publisher.topics[0] != topic {
+		t.Fatalf("expected topic %q, got %q", topic, publisher.topics[0])
+	}
+	if publisher.events[0].Type != eventType {
+		t.Fatalf(
+			"expected event type %q, got %q",
+			eventType,
+			publisher.events[0].Type,
+		)
+	}
+
+	return publisher.events[0]
+}
+
+func TestVote_EmitsVoteCreated(t *testing.T) {
+	voteRepo := &mockDebateVotesRepository{
+		createFn: func(ctx context.Context, vote domain.DebateVote) (domain.DebateVote, error) {
+			vote.ID = 1
+			return vote, nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByIDFn: func(ctx context.Context, debateID int) (domain.Debate, error) {
+			return openDebate(10, 100), nil
+		},
+	}
+	sidesRepo := &mockDebateSidesRepository{
+		getByDebateIDFn: func(ctx context.Context, debateID int) ([]domain.DebateSide, error) {
+			return []domain.DebateSide{{ID: 1}, {ID: 2}, {ID: 3}}, nil
+		},
+	}
+	publisher := &publisherMock{}
+
+	svc := newTestServiceWithPublisher(
+		voteRepo,
+		debatesRepo,
+		sidesRepo,
+		&mockCommentsRepository{},
+		publisher,
+	)
+
+	_, err := svc.Vote(context.Background(), 5, 10, 2)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	event := assertSingleEvent(
+		t,
+		publisher,
+		core_realtime.PostTopic(100),
+		core_realtime.EventDebateVoteCreated,
+	)
+
+	data, ok := event.Data.(core_realtime.VoteData)
+	if !ok {
+		t.Fatalf("expected VoteData, got %T", event.Data)
+	}
+	if data.DebateID != 10 || data.PostID != 100 || data.UserID != 5 || data.DebateSideID != 2 {
+		t.Fatalf("unexpected payload: %+v", data)
+	}
+	if data.IsChanged {
+		t.Fatalf("expected is_changed=false for new vote, got: %+v", data)
+	}
+}
+
+func TestChangeVote_EmitsVoteChanged(t *testing.T) {
+	voteRepo := &mockDebateVotesRepository{
+		updateFn: func(ctx context.Context, debateID, userID, debateSideID int, updatedAt time.Time) (domain.DebateVote, error) {
+			return domain.NewDebateVote(1, 2, debateID, userID, debateSideID, time.Now(), &updatedAt, true), nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByIDFn: func(ctx context.Context, debateID int) (domain.Debate, error) {
+			return openDebate(10, 100), nil
+		},
+	}
+	sidesRepo := &mockDebateSidesRepository{
+		getByDebateIDFn: func(ctx context.Context, debateID int) ([]domain.DebateSide, error) {
+			return []domain.DebateSide{{ID: 1}, {ID: 3}}, nil
+		},
+	}
+	commentsRepo := &mockCommentsRepository{
+		hasArgumentFn: func(ctx context.Context, userID, postID int) (bool, error) {
+			return false, nil
+		},
+	}
+	publisher := &publisherMock{}
+
+	svc := newTestServiceWithPublisher(voteRepo, debatesRepo, sidesRepo, commentsRepo, publisher)
+
+	_, err := svc.ChangeVote(context.Background(), 5, 10, 3)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	event := assertSingleEvent(
+		t,
+		publisher,
+		core_realtime.PostTopic(100),
+		core_realtime.EventDebateVoteChanged,
+	)
+
+	data, ok := event.Data.(core_realtime.VoteData)
+	if !ok {
+		t.Fatalf("expected VoteData, got %T", event.Data)
+	}
+	if data.DebateID != 10 || data.PostID != 100 || data.UserID != 5 || data.DebateSideID != 3 {
+		t.Fatalf("unexpected payload: %+v", data)
+	}
+	if !data.IsChanged {
+		t.Fatalf("expected is_changed=true for changed vote, got: %+v", data)
+	}
+}
+
+func TestFinishDebate_EmitsDebateFinished(t *testing.T) {
+	winnerSideID := 2
+	finishedAt := time.Now()
+	var getByIDCalls int
+
+	debatesRepo := &mockDebatesRepository{
+		getByIDFn: func(ctx context.Context, debateID int) (domain.Debate, error) {
+			getByIDCalls++
+			if getByIDCalls == 1 {
+				return openDebate(10, 100), nil
+			}
+
+			return domain.NewDebate(
+				10,
+				100,
+				core_enum.DebateStatusFinished,
+				nil,
+				time.Now(),
+				&finishedAt,
+				&winnerSideID,
+			), nil
+		},
+		getAuthorFn: func(ctx context.Context, debateID int) (int, error) {
+			return 5, nil
+		},
+		finishFn: func(ctx context.Context, debateID int) error {
+			return nil
+		},
+	}
+	publisher := &publisherMock{}
+
+	svc := newTestServiceWithPublisher(
+		&mockDebateVotesRepository{},
+		debatesRepo,
+		&mockDebateSidesRepository{},
+		&mockCommentsRepository{},
+		publisher,
+	)
+
+	err := svc.FinishDebate(context.Background(), 5, 10)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if getByIDCalls != 2 {
+		t.Fatalf("expected debate to be re-read after finishing, got %d calls", getByIDCalls)
+	}
+
+	event := assertSingleEvent(
+		t,
+		publisher,
+		core_realtime.PostTopic(100),
+		core_realtime.EventDebateFinished,
+	)
+
+	data, ok := event.Data.(core_realtime.DebateFinishedData)
+	if !ok {
+		t.Fatalf("expected DebateFinishedData, got %T", event.Data)
+	}
+	if data.DebateID != 10 || data.PostID != 100 || data.FinishedByUserID != 5 {
+		t.Fatalf("unexpected payload: %+v", data)
+	}
+	if data.WinnerSideID == nil || *data.WinnerSideID != winnerSideID {
+		t.Fatalf("expected winner side %d, got: %+v", winnerSideID, data.WinnerSideID)
+	}
+}
+
+func TestFinishDebate_ErrorEmitsNothing(t *testing.T) {
+	debatesRepo := &mockDebatesRepository{
+		getByIDFn: func(ctx context.Context, debateID int) (domain.Debate, error) {
+			return openDebate(10, 100), nil
+		},
+		getAuthorFn: func(ctx context.Context, debateID int) (int, error) {
+			return 5, nil
+		},
+		finishFn: func(ctx context.Context, debateID int) error {
+			t.Fatal("FinishDebate should not be called")
+			return nil
+		},
+	}
+	publisher := &publisherMock{}
+
+	svc := newTestServiceWithPublisher(
+		&mockDebateVotesRepository{},
+		debatesRepo,
+		&mockDebateSidesRepository{},
+		&mockCommentsRepository{},
+		publisher,
+	)
+
+	err := svc.FinishDebate(context.Background(), 99, 10)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if len(publisher.topics) != 0 || len(publisher.events) != 0 {
+		t.Fatalf("expected no events, got topics=%v events=%v", publisher.topics, publisher.events)
+	}
+}
+
+type peerMock struct {
+	payloads [][]byte
+}
+
+func (m *peerMock) Send(payload []byte) {
+	m.payloads = append(m.payloads, payload)
+}
+
+// TestVote_DeliversEnvelopeToSubscribedPeer проверяет весь путь события:
+// сервис -> Hub -> сериализованный конверт у подписчика.
+func TestVote_DeliversEnvelopeToSubscribedPeer(t *testing.T) {
+	hub := core_realtime.NewHub()
+	peer := &peerMock{}
+	hub.Subscribe(core_realtime.PostTopic(100), peer)
+
+	voteRepo := &mockDebateVotesRepository{
+		createFn: func(ctx context.Context, vote domain.DebateVote) (domain.DebateVote, error) {
+			vote.ID = 1
+			return vote, nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByIDFn: func(ctx context.Context, debateID int) (domain.Debate, error) {
+			return openDebate(10, 100), nil
+		},
+	}
+	sidesRepo := &mockDebateSidesRepository{
+		getByDebateIDFn: func(ctx context.Context, debateID int) ([]domain.DebateSide, error) {
+			return []domain.DebateSide{{ID: 1}, {ID: 2}}, nil
+		},
+	}
+
+	svc := NewDebateVotesService(voteRepo, debatesRepo, sidesRepo, &mockCommentsRepository{}, hub)
+
+	_, err := svc.Vote(context.Background(), 5, 10, 2)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(peer.payloads) != 1 {
+		t.Fatalf("expected 1 payload delivered, got %d", len(peer.payloads))
+	}
+
+	var envelope core_realtime.Envelope
+	if err := json.Unmarshal(peer.payloads[0], &envelope); err != nil {
+		t.Fatalf("expected valid JSON envelope, got error: %v", err)
+	}
+	if envelope.Type != core_realtime.EventDebateVoteCreated {
+		t.Fatalf("expected event type %q, got %q", core_realtime.EventDebateVoteCreated, envelope.Type)
+	}
+	if envelope.Topic != core_realtime.PostTopic(100) {
+		t.Fatalf("expected topic %q, got %q", core_realtime.PostTopic(100), envelope.Topic)
+	}
+	if envelope.OccurredAt.IsZero() {
+		t.Fatal("expected occurred_at to be set")
+	}
+
+	data, ok := envelope.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("expected JSON object payload, got %T", envelope.Data)
+	}
+	if data["debate_id"] != float64(10) || data["post_id"] != float64(100) {
+		t.Fatalf("unexpected payload: %+v", data)
 	}
 }

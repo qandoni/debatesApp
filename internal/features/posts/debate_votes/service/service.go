@@ -32,6 +32,15 @@ type DebateVotesService struct {
 	realtimeHub           core_realtime.Publisher
 }
 
+// publishEvent отправляет событие всем подписчикам топика поста.
+// Вызывается только после успешной записи в репозитории.
+func (s *DebateVotesService) publishEvent(postID int, eventType string, data any) {
+	s.realtimeHub.Publish(
+		core_realtime.PostTopic(postID),
+		core_realtime.NewEvent(eventType, data),
+	)
+}
+
 type CommentsRepository interface {
 	HasUserArgumentInPost(
 		ctx context.Context,

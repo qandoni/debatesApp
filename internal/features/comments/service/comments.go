@@ -8,6 +8,7 @@ import (
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_enum "github.com/qandoni/debatesApp/internal/core/enum"
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
+	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
 )
 
 func (s *CommentsService) CreateComment(
@@ -79,6 +80,12 @@ func (s *CommentsService) CreateComment(
 		)
 	}
 
+	s.publishEvent(
+		createdComment.PostID,
+		core_realtime.EventCommentCreated,
+		core_realtime.NewCommentCreatedData(createdComment),
+	)
+
 	return createdComment, nil
 
 }
@@ -135,6 +142,12 @@ func (s *CommentsService) UpdateComment(
 	if err != nil {
 		return domain.Comment{}, fmt.Errorf("update comment: %w", err)
 	}
+
+	s.publishEvent(
+		updatedComment.PostID,
+		core_realtime.EventCommentUpdated,
+		core_realtime.NewCommentUpdatedData(updatedComment),
+	)
 
 	return updatedComment, nil
 
@@ -197,6 +210,12 @@ func (s *CommentsService) SetAuthorLike(
 	if err != nil {
 		return domain.Comment{}, fmt.Errorf("set author like: %w", err)
 	}
+
+	s.publishEvent(
+		updatedComment.PostID,
+		core_realtime.EventArgumentAuthorLiked,
+		core_realtime.NewAuthorLikeData(updatedComment, authorID),
+	)
 
 	return updatedComment, nil
 }

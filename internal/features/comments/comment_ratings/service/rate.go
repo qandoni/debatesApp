@@ -8,6 +8,7 @@ import (
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
+	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
 )
 
 func (s *CommentRatingsService) Rate(
@@ -102,6 +103,12 @@ func (s *CommentRatingsService) Rate(
 			)
 		}
 
+		s.publishEvent(
+			comment.PostID,
+			core_realtime.EventArgumentRatingUpdated,
+			core_realtime.NewRatingData(createdRating, comment.PostID, true),
+		)
+
 		return createdRating, nil
 	}
 
@@ -124,6 +131,12 @@ func (s *CommentRatingsService) Rate(
 			err,
 		)
 	}
+
+	s.publishEvent(
+		comment.PostID,
+		core_realtime.EventArgumentRatingUpdated,
+		core_realtime.NewRatingData(updatedRating, comment.PostID, false),
+	)
 
 	return updatedRating, nil
 }
