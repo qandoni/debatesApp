@@ -3,6 +3,7 @@ package core_transport_websocket
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,7 +27,6 @@ const (
 )
 
 func newTestLogger() *core_logger.Logger {
-	// file не задан (логгер только в stdout), поэтому Close() вызывать нельзя.
 	return &core_logger.Logger{Logger: zap.NewNop()}
 }
 
@@ -197,16 +197,35 @@ func authAndReady(t *testing.T, conn *websocket.Conn) {
 	}
 }
 
-// subscribeAndWait подтверждает подписку, прогоняя ping/pong: кадры сервер
-// обрабатывает по порядку, поэтому pong гарантирует, что subscribe уже применён.
+// expectAck читает кадр-подтверждение подписки и сверяет его тип и post_id.
+func expectAck(t *testing.T, conn *websocket.Conn, messageType string, postID int) {
+	t.Helper()
+
+	message := readServerMessage(t, conn, time.Second)
+	if message.Type != messageType {
+		t.Fatalf("expected %q frame, got %q", messageType, message.Type)
+	}
+
+	data, ok := message.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("expected ack payload object, got %T", message.Data)
+	}
+	if data["post_id"] != float64(postID) {
+		t.Fatalf("expected post_id %d, got %v", postID, data["post_id"])
+	}
+}
+
+// subscribeAndWait подтверждает подписку: сначала приходит кадр "subscribed",
+// затем pong на отправленный ping (кадры обрабатываются строго по порядку).
 func subscribeAndWait(t *testing.T, conn *websocket.Conn, postID int) {
 	t.Helper()
 
 	writeClientMessage(t, conn, MessageTypeSubscribe, SubscribePayload{PostID: postID})
 	writeClientMessage(t, conn, MessageTypePing, nil)
 
-	message := readServerMessage(t, conn, time.Second)
-	if message.Type != MessageTypePong {
+	expectAck(t, conn, MessageTypeSubscribed, postID)
+
+	if message := readServerMessage(t, conn, time.Second); message.Type != MessageTypePong {
 		t.Fatalf("expected %q frame, got %q", MessageTypePong, message.Type)
 	}
 }
@@ -367,11 +386,97 @@ func TestHandle_UnsubscribeStopsEvents(t *testing.T) {
 
 	writeClientMessage(t, conn, MessageTypeUnsubscribe, SubscribePayload{PostID: 100})
 	writeClientMessage(t, conn, MessageTypePing, nil)
+	expectAck(t, conn, MessageTypeUnsubscribed, 100)
 	if message := readServerMessage(t, conn, time.Second); message.Type != MessageTypePong {
 		t.Fatalf("expected %q frame, got %q", MessageTypePong, message.Type)
 	}
 
 	fixture.hub.Publish(core_realtime.PostTopic(100), core_realtime.NewEvent("test.event", nil))
+
+	expectNoFrame(t, conn, 300*time.Millisecond)
+}
+
+func TestHandle_SubscribeSendsAck(t *testing.T) {
+	fixture := newWSFixture(t, tokenParserStub{userID: testUserID}, testConfig())
+	conn := fixture.dial(t, testOrigin)
+
+	authAndReady(t, conn)
+
+	writeClientMessage(t, conn, MessageTypeSubscribe, SubscribePayload{PostID: 100})
+	expectAck(t, conn, MessageTypeSubscribed, 100)
+
+	fixture.hub.Publish(core_realtime.PostTopic(100), core_realtime.NewEvent("test.event", nil))
+	if envelope := readEnvelope(t, conn, time.Second); envelope.Type != "test.event" {
+		t.Fatalf("expected event %q, got %q", "test.event", envelope.Type)
+	}
+}
+
+func TestHandle_SubscribeInvalidPayloadSendsErrorOnly(t *testing.T) {
+	fixture := newWSFixture(t, tokenParserStub{userID: testUserID}, testConfig())
+	conn := fixture.dial(t, testOrigin)
+
+	authAndReady(t, conn)
+
+	// post_id = 0 не проходит Validate: приходит только server.error, ack быть не должно.
+	writeClientMessage(t, conn, MessageTypeSubscribe, SubscribePayload{PostID: 0})
+	writeClientMessage(t, conn, MessageTypePing, nil)
+
+	message := readServerMessage(t, conn, time.Second)
+	if message.Type != MessageTypeError {
+		t.Fatalf("expected %q frame, got %q", MessageTypeError, message.Type)
+	}
+
+	data, ok := message.Data.(map[string]any)
+	if !ok {
+		t.Fatalf("expected error payload object, got %T", message.Data)
+	}
+	if data["code"] != "invalid_argument" {
+		t.Fatalf("expected code 'invalid_argument', got %v", data["code"])
+	}
+
+	if message := readServerMessage(t, conn, time.Second); message.Type != MessageTypePong {
+		t.Fatalf("expected %q frame, got %q", MessageTypePong, message.Type)
+	}
+
+	// Подписка не применилась: события по этому топику не приходят.
+	fixture.hub.Publish(core_realtime.PostTopic(0), core_realtime.NewEvent("test.event", nil))
+
+	expectNoFrame(t, conn, 300*time.Millisecond)
+}
+
+func TestHandle_UnsubscribeSendsAck(t *testing.T) {
+	fixture := newWSFixture(t, tokenParserStub{userID: testUserID}, testConfig())
+	conn := fixture.dial(t, testOrigin)
+
+	authAndReady(t, conn)
+	subscribeAndWait(t, conn, 100)
+
+	writeClientMessage(t, conn, MessageTypeUnsubscribe, SubscribePayload{PostID: 100})
+	writeClientMessage(t, conn, MessageTypePing, nil)
+
+	expectAck(t, conn, MessageTypeUnsubscribed, 100)
+	if message := readServerMessage(t, conn, time.Second); message.Type != MessageTypePong {
+		t.Fatalf("expected %q frame, got %q", MessageTypePong, message.Type)
+	}
+}
+
+func TestHandle_RepeatedSubscribeDeliversEventOnce(t *testing.T) {
+	fixture := newWSFixture(t, tokenParserStub{userID: testUserID}, testConfig())
+	conn := fixture.dial(t, testOrigin)
+
+	authAndReady(t, conn)
+	subscribeAndWait(t, conn, 100)
+
+	// Повторная подписка идемпотентна: hub хранит подписчиков множеством,
+	// но ack приходит на каждый subscribe.
+	writeClientMessage(t, conn, MessageTypeSubscribe, SubscribePayload{PostID: 100})
+	expectAck(t, conn, MessageTypeSubscribed, 100)
+
+	fixture.hub.Publish(core_realtime.PostTopic(100), core_realtime.NewEvent("test.event", nil))
+
+	if envelope := readEnvelope(t, conn, time.Second); envelope.Type != "test.event" {
+		t.Fatalf("expected event %q, got %q", "test.event", envelope.Type)
+	}
 
 	expectNoFrame(t, conn, 300*time.Millisecond)
 }
@@ -413,8 +518,15 @@ func TestHandle_OversizedFrameDropsConnection(t *testing.T) {
 	if err := conn.SetReadDeadline(time.Now().Add(2 * time.Second)); err != nil {
 		t.Fatalf("failed to set read deadline: %v", err)
 	}
-	if _, _, err := conn.ReadMessage(); err == nil {
-		t.Fatal("expected connection to be dropped after oversized frame")
+	// До обрыва успевает прийти ack подписки — читаем кадры, пока соединение не закроется.
+	for {
+		if _, _, err := conn.ReadMessage(); err != nil {
+			var netErr net.Error
+			if errors.As(err, &netErr) && netErr.Timeout() {
+				t.Fatal("connection was not dropped after oversized frame (read deadline exceeded)")
+			}
+			return
+		}
 	}
 }
 

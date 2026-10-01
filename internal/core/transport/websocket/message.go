@@ -13,9 +13,11 @@ const (
 	MessageTypeUnsubscribe = "unsubscribe"
 	MessageTypePing        = "ping"
 
-	MessageTypeReady = "ready"
-	MessageTypePong  = "pong"
-	MessageTypeError = "server.error"
+	MessageTypeReady        = "ready"
+	MessageTypePong         = "pong"
+	MessageTypeSubscribed   = "subscribed"
+	MessageTypeUnsubscribed = "unsubscribed"
+	MessageTypeError        = "server.error"
 )
 
 type ClientMessage struct {
@@ -43,6 +45,10 @@ func (p SubscribePayload) Validate() error {
 		return fmt.Errorf("'PostID' cannot be <=0: %w", core_errors.ErrInvalidArgument)
 	}
 	return nil
+}
+
+type SubscriptionAckData struct {
+	PostID int `json:"post_id"`
 }
 
 type ServerErrorData struct {

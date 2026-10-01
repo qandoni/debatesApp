@@ -81,14 +81,37 @@ func (c *Client) close() {
 }
 
 func (c *Client) Run() {
+	remoteAddr := c.remoteAddr()
+
 	defer c.close()
+	defer func() {
+		c.log.Debug("websocket client disconnected",
+			zap.Int("user_id", c.userID),
+			zap.String("remote_addr", remoteAddr),
+		)
+	}()
+
 	go c.writePump()
 	if err := c.authenticate(); err != nil {
-		c.log.Warn("websocket authentication failed", zap.Error(err))
+		c.log.Warn("websocket authentication failed",
+			zap.String("remote_addr", remoteAddr),
+			zap.Error(err),
+		)
 		c.Send(errorFrame("unauthorized", "authentication failed"))
 		return
 	}
+	c.log.Debug("websocket client connected",
+		zap.Int("user_id", c.userID),
+		zap.String("remote_addr", remoteAddr),
+	)
 	c.readPump()
+}
+
+func (c *Client) remoteAddr() string {
+	if addr := c.conn.RemoteAddr(); addr != nil {
+		return addr.String()
+	}
+	return ""
 }
 
 func (c *Client) authenticate() error {
@@ -161,11 +184,25 @@ func (c *Client) handleSubscribe(raw json.RawMessage) {
 		return
 	}
 	if err := payload.Validate(); err != nil {
+		c.log.Debug("websocket subscribe rejected",
+			zap.Int("user_id", c.userID),
+			zap.Error(err),
+		)
 		c.Send(errorFrame("invalid_argument", err.Error()))
 		return
 	}
 
-	c.hub.Subscribe(core_realtime.PostTopic(payload.PostID), c)
+	topic := core_realtime.PostTopic(payload.PostID)
+	c.hub.Subscribe(topic, c)
+
+	c.log.Debug("websocket client subscribed",
+		zap.Int("user_id", c.userID),
+		zap.String("topic", topic),
+	)
+	c.Send(mustMarshalServerMessage(
+		MessageTypeSubscribed,
+		SubscriptionAckData{PostID: payload.PostID},
+	))
 }
 
 func mustMarshalServerMessage(messageType string, data any) []byte {
@@ -186,10 +223,25 @@ func (c *Client) handleUnsubscribe(raw json.RawMessage) {
 		return
 	}
 	if err := payload.Validate(); err != nil {
+		c.log.Debug("websocket unsubscribe rejected",
+			zap.Int("user_id", c.userID),
+			zap.Error(err),
+		)
 		c.Send(errorFrame("invalid_argument", err.Error()))
 		return
 	}
-	c.hub.Unsubscribe(core_realtime.PostTopic(payload.PostID), c)
+
+	topic := core_realtime.PostTopic(payload.PostID)
+	c.hub.Unsubscribe(topic, c)
+
+	c.log.Debug("websocket client unsubscribed",
+		zap.Int("user_id", c.userID),
+		zap.String("topic", topic),
+	)
+	c.Send(mustMarshalServerMessage(
+		MessageTypeUnsubscribed,
+		SubscriptionAckData{PostID: payload.PostID},
+	))
 }
 
 func errorFrame(code, message string) []byte {

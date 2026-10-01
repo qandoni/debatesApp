@@ -28,7 +28,6 @@ type Hub struct {
 	peerTopics map[Peer]map[string]struct{}
 }
 
-// Компиляторная гарантия: сигнатура Publish у Hub не разъедется с интерфейсом.
 var _ Publisher = (*Hub)(nil)
 
 func (h *Hub) Subscribe(topic string, peer Peer) {

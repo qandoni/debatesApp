@@ -50,17 +50,15 @@ func (h *Handler) Register(router *gin.RouterGroup) {
 }
 
 func (h *Handler) Handle(c *gin.Context) {
-	log := core_logger.FromContext(c.Request.Context()) // ставится middleware.Logger
+	log := core_logger.FromContext(c.Request.Context())
 
 	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		// gorilla уже отправила HTTP-ответ (обычно 400) — c.Error/AbortWithStatus здесь
-		// нельзя: WriteHeader уже вызван. Только лог + Abort.
 		log.Warn("failed to upgrade to websocket", zap.Error(err))
 		c.Abort()
 		return
 	}
 
 	client := NewClient(conn, h.hub, h.parser, h.config, log)
-	client.Run() // блокируется на всё время жизни соединения
+	client.Run()
 }
