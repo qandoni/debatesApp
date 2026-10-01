@@ -9,6 +9,7 @@ import (
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_enum "github.com/qandoni/debatesApp/internal/core/enum"
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
+	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
 	core_postgres "github.com/qandoni/debatesApp/internal/core/repository/postgres"
 )
 
@@ -150,6 +151,16 @@ func (m *mockTxManager) WithinTransaction(ctx context.Context, fn func(ctx conte
 	return m.withinFn(ctx, fn)
 }
 
+type publisherMock struct {
+	topics []string
+	events []core_realtime.Event
+}
+
+func (m *publisherMock) Publish(topic string, event core_realtime.Event) {
+	m.topics = append(m.topics, topic)
+	m.events = append(m.events, event)
+}
+
 func newCommentsService(
 	comments CommentsRepository,
 	posts PostsRepository,
@@ -158,7 +169,27 @@ func newCommentsService(
 	votes DebateVotesRepository,
 	tx core_postgres.TransactionManager,
 ) *CommentsService {
-	return NewCommentsService(comments, posts, debates, sides, votes, tx)
+	return newCommentsServiceWithPublisher(
+		comments,
+		posts,
+		debates,
+		sides,
+		votes,
+		tx,
+		&publisherMock{},
+	)
+}
+
+func newCommentsServiceWithPublisher(
+	comments CommentsRepository,
+	posts PostsRepository,
+	debates DebatesRepository,
+	sides DebateSidesRepository,
+	votes DebateVotesRepository,
+	tx core_postgres.TransactionManager,
+	publisher core_realtime.Publisher,
+) *CommentsService {
+	return NewCommentsService(comments, posts, debates, sides, votes, tx, publisher)
 }
 
 func TestCreateComment_RegularPostNoParent(t *testing.T) {
@@ -563,5 +594,277 @@ func TestSetAuthorLike_Success(t *testing.T) {
 	}
 	if !updated.AuthorLiked {
 		t.Fatal("expected AuthorLiked=true")
+	}
+}
+
+// assertSingleEvent проверяет, что сервис отправил ровно одно событие в нужный топик.
+func assertSingleEvent(
+	t *testing.T,
+	publisher *publisherMock,
+	topic string,
+	eventType string,
+) core_realtime.Event {
+	t.Helper()
+
+	if len(publisher.topics) != 1 || len(publisher.events) != 1 {
+		t.Fatalf(
+			"expected exactly one event, got topics=%v events=%v",
+			publisher.topics,
+			publisher.events,
+		)
+	}
+	if publisher.topics[0] != topic {
+		t.Fatalf("expected topic %q, got %q", topic, publisher.topics[0])
+	}
+	if publisher.events[0].Type != eventType {
+		t.Fatalf(
+			"expected event type %q, got %q",
+			eventType,
+			publisher.events[0].Type,
+		)
+	}
+
+	return publisher.events[0]
+}
+
+func TestCreateComment_EmitsCommentCreated(t *testing.T) {
+	postsRepo := &mockPostsRepository{
+		getPostFn: func(ctx context.Context, postID int) (domain.Post, error) {
+			return domain.Post{ID: 100, IsDebate: false}, nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByPostFn: func(ctx context.Context, postID int) (domain.Debate, error) {
+			return domain.Debate{}, core_errors.ErrNotFound
+		},
+	}
+	commentsRepo := &mockCommentsRepository{
+		createCommentFn: func(ctx context.Context, comment domain.Comment) (domain.Comment, error) {
+			comment.ID = 1
+			comment.CreatedAt = time.Now()
+			return comment, nil
+		},
+	}
+	publisher := &publisherMock{}
+
+	svc := newCommentsServiceWithPublisher(
+		commentsRepo,
+		postsRepo,
+		debatesRepo,
+		&mockDebateSidesRepository{},
+		&mockDebateVotesRepository{},
+		&mockTxManager{},
+		publisher,
+	)
+
+	_, err := svc.CreateComment(context.Background(), 5, 100, nil, "hello")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	event := assertSingleEvent(
+		t,
+		publisher,
+		core_realtime.PostTopic(100),
+		core_realtime.EventCommentCreated,
+	)
+
+	data, ok := event.Data.(core_realtime.CommentCreatedData)
+	if !ok {
+		t.Fatalf("expected CommentCreatedData, got %T", event.Data)
+	}
+	if data.CommentID != 1 || data.PostID != 100 || data.AuthorID != 5 || data.Content != "hello" {
+		t.Fatalf("unexpected payload: %+v", data)
+	}
+	if data.ParentCommentID != nil || data.DebateSideID != nil {
+		t.Fatalf("expected nil parent and debate side, got: %+v", data)
+	}
+}
+
+func TestCreateArgument_EmitsArgumentCreated(t *testing.T) {
+	postsRepo := &mockPostsRepository{
+		getPostFn: func(ctx context.Context, postID int) (domain.Post, error) {
+			return domain.Post{ID: 100}, nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByPostFn: func(ctx context.Context, postID int) (domain.Debate, error) {
+			return domain.Debate{ID: 10, PostID: 100, Status: core_enum.DebateStatusOpen}, nil
+		},
+	}
+	sidesRepo := &mockDebateSidesRepository{
+		getByDebateIDFn: func(ctx context.Context, debateID int) ([]domain.DebateSide, error) {
+			return []domain.DebateSide{{ID: 2}}, nil
+		},
+	}
+	votesRepo := &mockDebateVotesRepository{
+		getByDebateUserFn: func(ctx context.Context, debateID, userID int) (domain.DebateVote, error) {
+			return domain.DebateVote{DebateID: 10, UserID: 5, DebateSideID: 2}, nil
+		},
+	}
+	commentsRepo := &mockCommentsRepository{
+		createCommentFn: func(ctx context.Context, comment domain.Comment) (domain.Comment, error) {
+			comment.ID = 42
+			return comment, nil
+		},
+	}
+	publisher := &publisherMock{}
+
+	svc := newCommentsServiceWithPublisher(
+		commentsRepo,
+		postsRepo,
+		debatesRepo,
+		sidesRepo,
+		votesRepo,
+		&mockTxManager{},
+		publisher,
+	)
+
+	_, err := svc.CreateArgument(context.Background(), 5, 100, 2, "my argument")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	event := assertSingleEvent(
+		t,
+		publisher,
+		core_realtime.PostTopic(100),
+		core_realtime.EventArgumentCreated,
+	)
+
+	data, ok := event.Data.(core_realtime.CommentCreatedData)
+	if !ok {
+		t.Fatalf("expected CommentCreatedData, got %T", event.Data)
+	}
+	if data.CommentID != 42 || data.PostID != 100 || data.AuthorID != 5 || data.Content != "my argument" {
+		t.Fatalf("unexpected payload: %+v", data)
+	}
+	if data.DebateSideID == nil || *data.DebateSideID != 2 {
+		t.Fatalf("expected debate side 2, got: %+v", data.DebateSideID)
+	}
+}
+
+func TestUpdateComment_EmitsCommentUpdated(t *testing.T) {
+	commentsRepo := &mockCommentsRepository{
+		getByIDFn: func(ctx context.Context, commentID int) (domain.Comment, error) {
+			return domain.Comment{ID: 1, AuthorID: 5, PostID: 100}, nil
+		},
+		updateCommentFn: func(ctx context.Context, comment domain.Comment) (domain.Comment, error) {
+			return comment, nil
+		},
+	}
+	publisher := &publisherMock{}
+
+	svc := newCommentsServiceWithPublisher(
+		commentsRepo,
+		&mockPostsRepository{},
+		&mockDebatesRepository{},
+		&mockDebateSidesRepository{},
+		&mockDebateVotesRepository{},
+		&mockTxManager{},
+		publisher,
+	)
+
+	_, err := svc.UpdateComment(context.Background(), 5, 1, "new content")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	event := assertSingleEvent(
+		t,
+		publisher,
+		core_realtime.PostTopic(100),
+		core_realtime.EventCommentUpdated,
+	)
+
+	data, ok := event.Data.(core_realtime.CommentUpdatedData)
+	if !ok {
+		t.Fatalf("expected CommentUpdatedData, got %T", event.Data)
+	}
+	if data.CommentID != 1 || data.PostID != 100 || data.AuthorID != 5 || data.Content != "new content" {
+		t.Fatalf("unexpected payload: %+v", data)
+	}
+}
+
+func TestSetAuthorLike_EmitsAuthorLikeUpdated(t *testing.T) {
+	sideID := 2
+	commentsRepo := &mockCommentsRepository{
+		getByIDFn: func(ctx context.Context, commentID int) (domain.Comment, error) {
+			return domain.Comment{ID: 1, PostID: 100, DebateSideID: &sideID}, nil
+		},
+		setAuthorLikeFn: func(ctx context.Context, commentID int, liked bool) (domain.Comment, error) {
+			return domain.Comment{ID: 1, PostID: 100, DebateSideID: &sideID, AuthorLiked: liked}, nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByPostFn: func(ctx context.Context, postID int) (domain.Debate, error) {
+			return domain.Debate{ID: 10, PostID: 100, Status: core_enum.DebateStatusOpen}, nil
+		},
+		getAuthorFn: func(ctx context.Context, debateID int) (int, error) {
+			return 5, nil
+		},
+	}
+	publisher := &publisherMock{}
+
+	svc := newCommentsServiceWithPublisher(
+		commentsRepo,
+		&mockPostsRepository{},
+		debatesRepo,
+		&mockDebateSidesRepository{},
+		&mockDebateVotesRepository{},
+		&mockTxManager{},
+		publisher,
+	)
+
+	_, err := svc.SetAuthorLike(context.Background(), 5, 1, true)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	event := assertSingleEvent(
+		t,
+		publisher,
+		core_realtime.PostTopic(100),
+		core_realtime.EventArgumentAuthorLiked,
+	)
+
+	data, ok := event.Data.(core_realtime.AuthorLikeData)
+	if !ok {
+		t.Fatalf("expected AuthorLikeData, got %T", event.Data)
+	}
+	if data.CommentID != 1 || data.PostID != 100 || data.DebateAuthorID != 5 || !data.AuthorLiked {
+		t.Fatalf("unexpected payload: %+v", data)
+	}
+}
+
+func TestCreateComment_ErrorEmitsNothing(t *testing.T) {
+	postsRepo := &mockPostsRepository{
+		getPostFn: func(ctx context.Context, postID int) (domain.Post, error) {
+			return domain.Post{ID: 100, IsDebate: true}, nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByPostFn: func(ctx context.Context, postID int) (domain.Debate, error) {
+			return domain.Debate{ID: 10, PostID: 100}, nil
+		},
+	}
+	publisher := &publisherMock{}
+
+	svc := newCommentsServiceWithPublisher(
+		&mockCommentsRepository{},
+		postsRepo,
+		debatesRepo,
+		&mockDebateSidesRepository{},
+		&mockDebateVotesRepository{},
+		&mockTxManager{},
+		publisher,
+	)
+
+	_, err := svc.CreateComment(context.Background(), 5, 100, nil, "hello")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if len(publisher.topics) != 0 || len(publisher.events) != 0 {
+		t.Fatalf("expected no events, got topics=%v events=%v", publisher.topics, publisher.events)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
+	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
 )
 
 func (s *CommentsService) CreateArgument(
@@ -30,6 +31,13 @@ func (s *CommentsService) CreateArgument(
 	if err != nil {
 		return domain.Comment{}, fmt.Errorf("create argument: %w", err)
 	}
+
+	s.publishEvent(
+		createdArgument.PostID,
+		core_realtime.EventArgumentCreated,
+		core_realtime.NewCommentCreatedData(createdArgument),
+	)
+
 	return createdArgument, nil
 }
 

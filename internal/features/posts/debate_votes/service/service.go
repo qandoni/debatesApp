@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
+	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
 )
 
 func NewDebateVotesService(
@@ -12,12 +13,14 @@ func NewDebateVotesService(
 	debatesRepository DebatesRepository,
 	debateSidesRepository DebateSidesRepository,
 	commentsRepository CommentsRepository,
+	realtimeHub core_realtime.Publisher,
 ) *DebateVotesService {
 	return &DebateVotesService{
 		debateVotesRepository,
 		debatesRepository,
 		debateSidesRepository,
 		commentsRepository,
+		realtimeHub,
 	}
 }
 
@@ -26,6 +29,16 @@ type DebateVotesService struct {
 	debatesRepository     DebatesRepository
 	debateSidesRepository DebateSidesRepository
 	commentsRepository    CommentsRepository
+	realtimeHub           core_realtime.Publisher
+}
+
+// publishEvent отправляет событие всем подписчикам топика поста.
+// Вызывается только после успешной записи в репозитории.
+func (s *DebateVotesService) publishEvent(postID int, eventType string, data any) {
+	s.realtimeHub.Publish(
+		core_realtime.PostTopic(postID),
+		core_realtime.NewEvent(eventType, data),
+	)
 }
 
 type CommentsRepository interface {

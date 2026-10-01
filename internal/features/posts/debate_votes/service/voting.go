@@ -8,6 +8,7 @@ import (
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_enum "github.com/qandoni/debatesApp/internal/core/enum"
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
+	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
 )
 
 func (s *DebateVotesService) Vote(
@@ -17,7 +18,8 @@ func (s *DebateVotesService) Vote(
 	debateSideID int,
 ) (domain.DebateVote, error) {
 
-	if _, err := s.getOpenDebate(ctx, debateID); err != nil {
+	debate, err := s.getOpenDebate(ctx, debateID)
+	if err != nil {
 		return domain.DebateVote{}, err
 	}
 
@@ -43,6 +45,12 @@ func (s *DebateVotesService) Vote(
 			err,
 		)
 	}
+
+	s.publishEvent(
+		debate.PostID,
+		core_realtime.EventDebateVoteCreated,
+		core_realtime.NewVoteData(createdVote, debate.PostID, false),
+	)
 
 	return createdVote, nil
 }
@@ -89,6 +97,12 @@ func (s *DebateVotesService) ChangeVote(
 			err,
 		)
 	}
+
+	s.publishEvent(
+		debate.PostID,
+		core_realtime.EventDebateVoteChanged,
+		core_realtime.NewVoteData(updatedVote, debate.PostID, true),
+	)
 
 	return updatedVote, nil
 }
