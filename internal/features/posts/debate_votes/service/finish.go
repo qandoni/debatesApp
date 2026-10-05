@@ -36,23 +36,26 @@ func (s *DebateVotesService) FinishDebate(
 
 	finishedDebate, err := s.debatesRepository.GetByID(ctx, debateID)
 	if err != nil {
-		// Запись уже прошла, поэтому не роняем операцию: сообщаем о финише
-		// без обогащения (winner_side_id будет null), а не отдаём ошибку
-		// на успешную запись.
-		s.publishEvent(
+		// Запись уже прошла, поэтому не роняем операцию из-за неудачного
+		// чтения: сообщаем о финише без обогащения (winner_side_id будет null).
+		if publishErr := s.publishEvent(
 			debate.PostID,
 			core_realtime.EventDebateFinished,
 			core_realtime.NewDebateFinishedData(debate, userID),
-		)
+		); publishErr != nil {
+			return fmt.Errorf("publish debate finished event: %w", publishErr)
+		}
 
 		return nil
 	}
 
-	s.publishEvent(
+	if err := s.publishEvent(
 		finishedDebate.PostID,
 		core_realtime.EventDebateFinished,
 		core_realtime.NewDebateFinishedData(finishedDebate, userID),
-	)
+	); err != nil {
+		return fmt.Errorf("publish debate finished event: %w", err)
+	}
 
 	return nil
 }

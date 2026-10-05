@@ -81,6 +81,11 @@ func main() {
 	logger.Debug("initializing feature", zap.String("feature", "minio"))
 
 	minioConfig := minio.NewConfigMust()
+	logger.Debug("minio config",
+		zap.String("endpoint", minioConfig.Endpoint),
+		zap.String("bucket", minioConfig.Bucket),
+		zap.Bool("secure", minioConfig.Secure),
+	)
 
 	storage, err := minio.NewStorage(minioConfig)
 	if err != nil {
@@ -116,10 +121,10 @@ func main() {
 	commentsRepository := comments_repository.NewCommentsRepository(pool, pool.OpTimeout())
 	commentsService := comments_service.NewCommentsService(commentsRepository, postsRepository, debatesRepository, debatesSidesRepository, debateVotesRepository, txManager, realtimeHub)
 	commentsHTTPTransport := comments_transport_http.NewCommentsHTTPHandler(commentsService, jwt)
-	debateVotesService := debate_votes_service.NewDebateVotesService(debateVotesRepository, debatesRepository, debatesSidesRepository, commentsRepository, realtimeHub)
+	debateVotesService := debate_votes_service.NewDebateVotesService(debateVotesRepository, debatesRepository, debatesSidesRepository, commentsRepository, txManager, realtimeHub)
 	debateVotesHTTPTransport := debate_votes_http_transport.NewDebateVotesHTTPTransport(debateVotesService, jwt)
 	commentRatingsRepository := comments_ratings_repository.NewCommentRatingsRepository(pool, pool.OpTimeout())
-	commentRatingsService := comment_ratings_service.NewCommentRatingsService(commentRatingsRepository, commentsRepository, debatesRepository, realtimeHub)
+	commentRatingsService := comment_ratings_service.NewCommentRatingsService(commentRatingsRepository, commentsRepository, debatesRepository, txManager, realtimeHub)
 	commentRatingsHTTPHandler := comment_ratings_http_transport.NewCommentRatingsHTTPHandler(commentRatingsService, jwt)
 	statisticsRepository := statistics_repository.NewDebateStatisticsRepository(pool, pool.OpTimeout())
 	statisticsService := statistics_service.NewStatisticsService(statisticsRepository, debatesRepository)

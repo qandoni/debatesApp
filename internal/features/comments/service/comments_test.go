@@ -85,11 +85,12 @@ func (m *mockPostsRepository) GetPosts(ctx context.Context, limit, offset *int) 
 }
 
 type mockDebatesRepository struct {
-	getByIDFn      func(ctx context.Context, debateID int) (domain.Debate, error)
-	finishFn       func(ctx context.Context, debateID int) error
-	getAuthorFn    func(ctx context.Context, debateID int) (int, error)
-	getByPostFn    func(ctx context.Context, postID int) (domain.Debate, error)
-	createDebateFn func(ctx context.Context, debate domain.Debate) (domain.Debate, error)
+	getByIDFn            func(ctx context.Context, debateID int) (domain.Debate, error)
+	finishFn             func(ctx context.Context, debateID int) error
+	getAuthorFn          func(ctx context.Context, debateID int) (int, error)
+	getByPostFn          func(ctx context.Context, postID int) (domain.Debate, error)
+	getByPostForUpdateFn func(ctx context.Context, postID int) (domain.Debate, error)
+	createDebateFn       func(ctx context.Context, debate domain.Debate) (domain.Debate, error)
 }
 
 func (m *mockDebatesRepository) GetByID(ctx context.Context, debateID int) (domain.Debate, error) {
@@ -105,6 +106,16 @@ func (m *mockDebatesRepository) GetAuthorID(ctx context.Context, debateID int) (
 }
 
 func (m *mockDebatesRepository) GetByPostID(ctx context.Context, postID int) (domain.Debate, error) {
+	return m.getByPostFn(ctx, postID)
+}
+
+// GetByPostIDForUpdate по умолчанию отдаёт тот же стаб, что и GetByPostID;
+// отдельный getByPostForUpdateFn позволяет тесту проверить, что вызван именно
+// блокирующий вариант (FOR UPDATE).
+func (m *mockDebatesRepository) GetByPostIDForUpdate(ctx context.Context, postID int) (domain.Debate, error) {
+	if m.getByPostForUpdateFn != nil {
+		return m.getByPostForUpdateFn(ctx, postID)
+	}
 	return m.getByPostFn(ctx, postID)
 }
 
@@ -148,17 +159,26 @@ type mockTxManager struct {
 }
 
 func (m *mockTxManager) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	if m.withinFn == nil {
+		return fn(ctx)
+	}
 	return m.withinFn(ctx, fn)
 }
 
 type publisherMock struct {
-	topics []string
-	events []core_realtime.Event
+	topics    []string
+	events    []core_realtime.Event
+	err       error
+	onPublish func()
 }
 
-func (m *publisherMock) Publish(topic string, event core_realtime.Event) {
+func (m *publisherMock) Publish(topic string, event core_realtime.Event) error {
 	m.topics = append(m.topics, topic)
 	m.events = append(m.events, event)
+	if m.onPublish != nil {
+		m.onPublish()
+	}
+	return m.err
 }
 
 func newCommentsService(
@@ -866,5 +886,137 @@ func TestCreateComment_ErrorEmitsNothing(t *testing.T) {
 	}
 	if len(publisher.topics) != 0 || len(publisher.events) != 0 {
 		t.Fatalf("expected no events, got topics=%v events=%v", publisher.topics, publisher.events)
+	}
+}
+
+func TestCreateComment_PublishErrorPropagates(t *testing.T) {
+	postsRepo := &mockPostsRepository{
+		getPostFn: func(ctx context.Context, postID int) (domain.Post, error) {
+			return domain.Post{ID: 100, IsDebate: false}, nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByPostFn: func(ctx context.Context, postID int) (domain.Debate, error) {
+			return domain.Debate{}, core_errors.ErrNotFound
+		},
+	}
+	persisted := false
+	commentsRepo := &mockCommentsRepository{
+		createCommentFn: func(ctx context.Context, comment domain.Comment) (domain.Comment, error) {
+			persisted = true
+			comment.ID = 1
+			return comment, nil
+		},
+	}
+	publishErr := errors.New("publish failed")
+	publisher := &publisherMock{err: publishErr}
+
+	svc := newCommentsServiceWithPublisher(
+		commentsRepo,
+		postsRepo,
+		debatesRepo,
+		&mockDebateSidesRepository{},
+		&mockDebateVotesRepository{},
+		&mockTxManager{},
+		publisher,
+	)
+
+	_, err := svc.CreateComment(context.Background(), 5, 100, nil, "hello")
+	if err == nil {
+		t.Fatal("expected publish error, got nil")
+	}
+	if !errors.Is(err, publishErr) {
+		t.Fatalf("expected wrapped publish error, got: %v", err)
+	}
+	if !persisted {
+		t.Fatal("comment must be persisted before publish (publish error must not roll back DB write)")
+	}
+	if len(publisher.events) != 1 {
+		t.Fatalf("expected 1 publish attempt, got %d", len(publisher.events))
+	}
+}
+
+func TestSetAuthorLike_DebateFinishedUnderLockNoWrite(t *testing.T) {
+	written := false
+	sideID := 2
+
+	commentsRepo := &mockCommentsRepository{
+		getByIDFn: func(ctx context.Context, commentID int) (domain.Comment, error) {
+			return domain.Comment{ID: 1, PostID: 100, DebateSideID: &sideID}, nil
+		},
+		setAuthorLikeFn: func(ctx context.Context, commentID int, liked bool) (domain.Comment, error) {
+			written = true
+			return domain.Comment{ID: commentID, PostID: 100, AuthorLiked: liked}, nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByPostForUpdateFn: func(ctx context.Context, postID int) (domain.Debate, error) {
+			return domain.Debate{ID: 10, PostID: 100, Status: "FINISHED"}, nil
+		},
+	}
+
+	svc := newCommentsService(
+		commentsRepo,
+		&mockPostsRepository{},
+		debatesRepo,
+		&mockDebateSidesRepository{},
+		&mockDebateVotesRepository{},
+		&mockTxManager{},
+	)
+
+	_, err := svc.SetAuthorLike(context.Background(), 5, 1, true)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, core_errors.ErrConflict) {
+		t.Fatalf("expected ErrConflict, got: %v", err)
+	}
+	if written {
+		t.Fatal("write must not happen: FINISHED status was observed under FOR UPDATE lock")
+	}
+}
+
+func TestUpdateComment_PublishAfterCommit(t *testing.T) {
+	var order []string
+
+	commentsRepo := &mockCommentsRepository{
+		getByIDFn: func(ctx context.Context, commentID int) (domain.Comment, error) {
+			return domain.Comment{ID: 1, PostID: 100, AuthorID: 5, Version: 1}, nil
+		},
+		updateCommentFn: func(ctx context.Context, comment domain.Comment) (domain.Comment, error) {
+			return comment, nil
+		},
+	}
+	tx := &mockTxManager{
+		withinFn: func(ctx context.Context, fn func(ctx context.Context) error) error {
+			if err := fn(ctx); err != nil {
+				return err
+			}
+			order = append(order, "tx-committed")
+			return nil
+		},
+	}
+	publisher := &publisherMock{
+		onPublish: func() {
+			order = append(order, "publish")
+		},
+	}
+
+	svc := newCommentsServiceWithPublisher(
+		commentsRepo,
+		&mockPostsRepository{},
+		&mockDebatesRepository{},
+		&mockDebateSidesRepository{},
+		&mockDebateVotesRepository{},
+		tx,
+		publisher,
+	)
+
+	if _, err := svc.UpdateComment(context.Background(), 5, 1, "edited"); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if len(order) != 2 || order[0] != "tx-committed" || order[1] != "publish" {
+		t.Fatalf("expected publish strictly after commit, got order: %v", order)
 	}
 }

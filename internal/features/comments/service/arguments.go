@@ -15,28 +15,38 @@ func (s *CommentsService) CreateArgument(
 	debateSideID int,
 	content string,
 ) (domain.Comment, error) {
-	if err := s.validateArgumentCreation(ctx, userID, postID, debateSideID); err != nil {
+	var createdArgument domain.Comment
+
+	if err := s.txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.validateArgumentCreation(txCtx, userID, postID, debateSideID); err != nil {
+			return err
+		}
+
+		argument := domain.NewCommentUninitialized(
+			postID,
+			userID,
+			nil,
+			&debateSideID,
+			content,
+		)
+
+		var err error
+		createdArgument, err = s.commentsRepository.CreateComment(txCtx, argument)
+		if err != nil {
+			return fmt.Errorf("create argument: %w", err)
+		}
+		return nil
+	}); err != nil {
 		return domain.Comment{}, err
 	}
 
-	argument := domain.NewCommentUninitialized(
-		postID,
-		userID,
-		nil,
-		&debateSideID,
-		content,
-	)
-
-	createdArgument, err := s.commentsRepository.CreateComment(ctx, argument)
-	if err != nil {
-		return domain.Comment{}, fmt.Errorf("create argument: %w", err)
-	}
-
-	s.publishEvent(
+	if err := s.publishEvent(
 		createdArgument.PostID,
 		core_realtime.EventArgumentCreated,
 		core_realtime.NewCommentCreatedData(createdArgument),
-	)
+	); err != nil {
+		return domain.Comment{}, fmt.Errorf("publish argument created event: %w", err)
+	}
 
 	return createdArgument, nil
 }

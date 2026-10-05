@@ -2,6 +2,7 @@ package core_realtime
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 )
@@ -11,24 +12,24 @@ type Peer interface {
 }
 
 type Publisher interface {
-	Publish(topic string, event Event)
+	Publish(topic string, event Event) error
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		mtx:        &sync.RWMutex{},
-		topics:     make(map[string]map[Peer]struct{}),
-		peerTopics: make(map[Peer]map[string]struct{}),
+		mtx:    &sync.RWMutex{},
+		topics: make(map[string]map[Peer]struct{}),
 	}
 }
 
+// Hub хранит все подписки в единственной map «топик → подписчики»: она
+// является единственным источником истины, поэтому вторая обратная map и
+// ручная синхронизация между ними не нужны. Пустые топики удаляются при
+// отписке, поэтому UnsubscribeAll обходит только активные топики.
 type Hub struct {
-	mtx        *sync.RWMutex
-	topics     map[string]map[Peer]struct{}
-	peerTopics map[Peer]map[string]struct{}
+	mtx    *sync.RWMutex
+	topics map[string]map[Peer]struct{}
 }
-
-var _ Publisher = (*Hub)(nil)
 
 func (h *Hub) Subscribe(topic string, peer Peer) {
 	h.mtx.Lock()
@@ -40,36 +41,19 @@ func (h *Hub) Subscribe(topic string, peer Peer) {
 		h.topics[topic] = subscribers
 	}
 	subscribers[peer] = struct{}{}
-
-	topics, ok := h.peerTopics[peer]
-	if !ok {
-		topics = make(map[string]struct{})
-		h.peerTopics[peer] = topics
-	}
-	topics[topic] = struct{}{}
 }
 
 func (h *Hub) Unsubscribe(topic string, peer Peer) {
 	h.mtx.Lock()
 	defer h.mtx.Unlock()
 
-	if subscribers, ok := h.topics[topic]; ok {
-		delete(subscribers, peer)
-		if len(subscribers) == 0 {
-			delete(h.topics, topic)
-		}
-	}
-	h.removePeerTopicLocked(peer, topic)
-}
-
-func (h *Hub) removePeerTopicLocked(peer Peer, topic string) {
-	topics, ok := h.peerTopics[peer]
+	subscribers, ok := h.topics[topic]
 	if !ok {
 		return
 	}
-	delete(topics, topic)
-	if len(topics) == 0 {
-		delete(h.peerTopics, peer)
+	delete(subscribers, peer)
+	if len(subscribers) == 0 {
+		delete(h.topics, topic)
 	}
 }
 
@@ -77,20 +61,15 @@ func (h *Hub) UnsubscribeAll(peer Peer) {
 	h.mtx.Lock()
 	defer h.mtx.Unlock()
 
-	for topic := range h.peerTopics[peer] {
-		subscribers, ok := h.topics[topic]
-		if !ok {
-			continue
-		}
+	for topic, subscribers := range h.topics {
 		delete(subscribers, peer)
 		if len(subscribers) == 0 {
 			delete(h.topics, topic)
 		}
 	}
-	delete(h.peerTopics, peer)
 }
 
-func (h *Hub) Publish(topic string, event Event) {
+func (h *Hub) Publish(topic string, event Event) error {
 	envelope := Envelope{
 		Type:       event.Type,
 		Topic:      topic,
@@ -100,8 +79,12 @@ func (h *Hub) Publish(topic string, event Event) {
 
 	payload, err := json.Marshal(envelope)
 	if err != nil {
-		return
+		return fmt.Errorf("marshal event envelope: %w", err)
 	}
+
+	// Снапшот подписчиков снимается под RLock, а отправка идёт уже без
+	// блокировки: Peer.Send может обращаться к Hub (например, отписываться
+	// при переполнении буфера), удержание RLock здесь приводило к само-дедлоку.
 	h.mtx.RLock()
 	subscribers := make([]Peer, 0, len(h.topics[topic]))
 	for peer := range h.topics[topic] {
@@ -112,4 +95,5 @@ func (h *Hub) Publish(topic string, event Event) {
 	for _, peer := range subscribers {
 		peer.Send(payload)
 	}
+	return nil
 }

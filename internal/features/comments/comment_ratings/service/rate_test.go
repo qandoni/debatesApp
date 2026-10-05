@@ -38,21 +38,45 @@ func (m *mockCommentsRepository) GetByID(ctx context.Context, commentID int) (do
 }
 
 type mockDebatesRepository struct {
-	getByPostFn func(ctx context.Context, postID int) (domain.Debate, error)
+	getByPostFn          func(ctx context.Context, postID int) (domain.Debate, error)
+	getByPostForUpdateFn func(ctx context.Context, postID int) (domain.Debate, error)
 }
 
 func (m *mockDebatesRepository) GetByPostID(ctx context.Context, postID int) (domain.Debate, error) {
 	return m.getByPostFn(ctx, postID)
 }
 
+// GetByPostIDForUpdate по умолчанию отдаёт тот же стаб, что и GetByPostID;
+// отдельный getByPostForUpdateFn позволяет тесту проверить, что вызван именно
+// блокирующий вариант (FOR UPDATE).
+func (m *mockDebatesRepository) GetByPostIDForUpdate(ctx context.Context, postID int) (domain.Debate, error) {
+	if m.getByPostForUpdateFn != nil {
+		return m.getByPostForUpdateFn(ctx, postID)
+	}
+	return m.getByPostFn(ctx, postID)
+}
+
+type mockTxManager struct {
+	withinFn func(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+func (m *mockTxManager) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	if m.withinFn == nil {
+		return fn(ctx)
+	}
+	return m.withinFn(ctx, fn)
+}
+
 type publisherMock struct {
 	topics []string
 	events []core_realtime.Event
+	err    error
 }
 
-func (m *publisherMock) Publish(topic string, event core_realtime.Event) {
+func (m *publisherMock) Publish(topic string, event core_realtime.Event) error {
 	m.topics = append(m.topics, topic)
 	m.events = append(m.events, event)
+	return m.err
 }
 
 func newRatingsService(
@@ -69,7 +93,7 @@ func newRatingsServiceWithPublisher(
 	debates DebatesRepository,
 	publisher core_realtime.Publisher,
 ) *CommentRatingsService {
-	return NewCommentRatingsService(ratings, comments, debates, publisher)
+	return NewCommentRatingsService(ratings, comments, debates, &mockTxManager{}, publisher)
 }
 
 func openDebate() domain.Debate {
@@ -416,3 +440,77 @@ func TestRate_SameRatingEmitsNothing(t *testing.T) {
 }
 
 var _ = time.Now
+
+func TestRate_PublishErrorPropagates(t *testing.T) {
+	persisted := false
+	ratingsRepo := &mockCommentRatingsRepository{
+		getFn: func(ctx context.Context, commentID, userID int) (domain.CommentRating, error) {
+			return domain.CommentRating{}, core_errors.ErrNotFound
+		},
+		createFn: func(ctx context.Context, rating domain.CommentRating) (domain.CommentRating, error) {
+			persisted = true
+			return rating, nil
+		},
+	}
+	commentsRepo := &mockCommentsRepository{
+		getByIDFn: func(ctx context.Context, commentID int) (domain.Comment, error) {
+			return rootArgument(), nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByPostFn: func(ctx context.Context, postID int) (domain.Debate, error) {
+			return openDebate(), nil
+		},
+	}
+	publishErr := errors.New("publish failed")
+	publisher := &publisherMock{err: publishErr}
+
+	svc := newRatingsServiceWithPublisher(ratingsRepo, commentsRepo, debatesRepo, publisher)
+
+	_, err := svc.Rate(context.Background(), 5, 1, 4)
+	if err == nil {
+		t.Fatal("expected publish error, got nil")
+	}
+	if !errors.Is(err, publishErr) {
+		t.Fatalf("expected wrapped publish error, got: %v", err)
+	}
+	if !persisted {
+		t.Fatal("rating must be persisted before publish (publish error must not roll back DB write)")
+	}
+	if len(publisher.events) != 1 {
+		t.Fatalf("expected 1 publish attempt, got %d", len(publisher.events))
+	}
+}
+
+func TestRate_UsesForUpdateLock(t *testing.T) {
+	locked := false
+
+	ratingsRepo := &mockCommentRatingsRepository{
+		getFn: func(ctx context.Context, commentID, userID int) (domain.CommentRating, error) {
+			return domain.CommentRating{}, core_errors.ErrNotFound
+		},
+		createFn: func(ctx context.Context, rating domain.CommentRating) (domain.CommentRating, error) {
+			return rating, nil
+		},
+	}
+	commentsRepo := &mockCommentsRepository{
+		getByIDFn: func(ctx context.Context, commentID int) (domain.Comment, error) {
+			return rootArgument(), nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByPostForUpdateFn: func(ctx context.Context, postID int) (domain.Debate, error) {
+			locked = true
+			return openDebate(), nil
+		},
+	}
+
+	svc := newRatingsService(ratingsRepo, commentsRepo, debatesRepo)
+
+	if _, err := svc.Rate(context.Background(), 5, 1, 4); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if !locked {
+		t.Fatal("expected debate row to be read via GetByPostIDForUpdate (FOR UPDATE)")
+	}
+}

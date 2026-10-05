@@ -32,11 +32,33 @@ func (m *mockDebateVotesRepository) GetByDebateAndUser(ctx context.Context, deba
 }
 
 type mockDebatesRepository struct {
-	getByIDFn      func(ctx context.Context, debateID int) (domain.Debate, error)
-	finishFn       func(ctx context.Context, debateID int) error
-	getAuthorFn    func(ctx context.Context, debateID int) (int, error)
-	getByPostFn    func(ctx context.Context, postID int) (domain.Debate, error)
-	createDebateFn func(ctx context.Context, debate domain.Debate) (domain.Debate, error)
+	getByIDFn          func(ctx context.Context, debateID int) (domain.Debate, error)
+	finishFn           func(ctx context.Context, debateID int) error
+	getAuthorFn        func(ctx context.Context, debateID int) (int, error)
+	getByPostFn        func(ctx context.Context, postID int) (domain.Debate, error)
+	getByIDForUpdateFn func(ctx context.Context, debateID int) (domain.Debate, error)
+	createDebateFn     func(ctx context.Context, debate domain.Debate) (domain.Debate, error)
+}
+
+// GetByIDForUpdate по умолчанию отдаёт тот же стаб, что и GetByID;
+// отдельный getByIDForUpdateFn позволяет тесту проверить, что вызван именно
+// блокирующий вариант (FOR UPDATE).
+func (m *mockDebatesRepository) GetByIDForUpdate(ctx context.Context, debateID int) (domain.Debate, error) {
+	if m.getByIDForUpdateFn != nil {
+		return m.getByIDForUpdateFn(ctx, debateID)
+	}
+	return m.getByIDFn(ctx, debateID)
+}
+
+type mockTxManager struct {
+	withinFn func(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+func (m *mockTxManager) WithinTransaction(ctx context.Context, fn func(ctx context.Context) error) error {
+	if m.withinFn == nil {
+		return fn(ctx)
+	}
+	return m.withinFn(ctx, fn)
 }
 
 func (m *mockDebatesRepository) GetByID(ctx context.Context, debateID int) (domain.Debate, error) {
@@ -107,11 +129,13 @@ func finishedDebate(debateID, postID int) domain.Debate {
 type publisherMock struct {
 	topics []string
 	events []core_realtime.Event
+	err    error
 }
 
-func (m *publisherMock) Publish(topic string, event core_realtime.Event) {
+func (m *publisherMock) Publish(topic string, event core_realtime.Event) error {
 	m.topics = append(m.topics, topic)
 	m.events = append(m.events, event)
+	return m.err
 }
 
 func newTestService(
@@ -136,7 +160,7 @@ func newTestServiceWithPublisher(
 	comments CommentsRepository,
 	publisher core_realtime.Publisher,
 ) *DebateVotesService {
-	return NewDebateVotesService(debateVotes, debates, sides, comments, publisher)
+	return NewDebateVotesService(debateVotes, debates, sides, comments, &mockTxManager{}, publisher)
 }
 
 func TestVote_Success(t *testing.T) {
@@ -653,7 +677,7 @@ func TestVote_DeliversEnvelopeToSubscribedPeer(t *testing.T) {
 		},
 	}
 
-	svc := NewDebateVotesService(voteRepo, debatesRepo, sidesRepo, &mockCommentsRepository{}, hub)
+	svc := NewDebateVotesService(voteRepo, debatesRepo, sidesRepo, &mockCommentsRepository{}, &mockTxManager{}, hub)
 
 	_, err := svc.Vote(context.Background(), 5, 10, 2)
 	if err != nil {
@@ -684,5 +708,43 @@ func TestVote_DeliversEnvelopeToSubscribedPeer(t *testing.T) {
 	}
 	if data["debate_id"] != float64(10) || data["post_id"] != float64(100) {
 		t.Fatalf("unexpected payload: %+v", data)
+	}
+}
+
+func TestVote_PublishErrorPropagates(t *testing.T) {
+	persisted := false
+	voteRepo := &mockDebateVotesRepository{
+		createFn: func(ctx context.Context, vote domain.DebateVote) (domain.DebateVote, error) {
+			persisted = true
+			return vote, nil
+		},
+	}
+	debatesRepo := &mockDebatesRepository{
+		getByIDFn: func(ctx context.Context, debateID int) (domain.Debate, error) {
+			return openDebate(10, 100), nil
+		},
+	}
+	sidesRepo := &mockDebateSidesRepository{
+		getByDebateIDFn: func(ctx context.Context, debateID int) ([]domain.DebateSide, error) {
+			return []domain.DebateSide{{ID: 1}, {ID: 2}, {ID: 3}}, nil
+		},
+	}
+	publishErr := errors.New("publish failed")
+	publisher := &publisherMock{err: publishErr}
+
+	svc := newTestServiceWithPublisher(voteRepo, debatesRepo, sidesRepo, &mockCommentsRepository{}, publisher)
+
+	_, err := svc.Vote(context.Background(), 5, 10, 2)
+	if err == nil {
+		t.Fatal("expected publish error, got nil")
+	}
+	if !errors.Is(err, publishErr) {
+		t.Fatalf("expected wrapped publish error, got: %v", err)
+	}
+	if !persisted {
+		t.Fatal("vote must be persisted before publish (publish error must not roll back DB write)")
+	}
+	if len(publisher.events) != 1 {
+		t.Fatalf("expected 1 publish attempt, got %d", len(publisher.events))
 	}
 }

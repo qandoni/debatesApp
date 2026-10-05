@@ -39,10 +39,8 @@ type CommentsService struct {
 	realtimeHub           core_realtime.Publisher
 }
 
-// publishEvent отправляет событие всем подписчикам топика поста.
-// Вызывается только после успешной записи в репозитории.
-func (s *CommentsService) publishEvent(postID int, eventType string, data any) {
-	s.realtimeHub.Publish(
+func (s *CommentsService) publishEvent(postID int, eventType string, data any) error {
+	return s.realtimeHub.Publish(
 		core_realtime.PostTopic(postID),
 		core_realtime.NewEvent(eventType, data),
 	)
@@ -85,6 +83,11 @@ type DebatesRepository interface {
 	) (domain.Debate, error)
 
 	GetByPostID(
+		ctx context.Context,
+		postID int,
+	) (domain.Debate, error)
+
+	GetByPostIDForUpdate(
 		ctx context.Context,
 		postID int,
 	) (domain.Debate, error)
