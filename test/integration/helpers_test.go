@@ -95,13 +95,13 @@ func wireDependencies() {
 	itBcrypt = core_password.NewBcryptHasher()
 
 	itVotesService = debate_votes_service.NewDebateVotesService(
-		itVotesRepo, itDebatesRepo, itSidesRepo, itCommentsRepo, core_realtime.NewHub(),
+		itVotesRepo, itDebatesRepo, itSidesRepo, itCommentsRepo, itTxManager, core_realtime.NewHub(),
 	)
 	itCommentsService = comments_service.NewCommentsService(
 		itCommentsRepo, itPostsRepo, itDebatesRepo, itSidesRepo, itVotesRepo, itTxManager, core_realtime.NewHub(),
 	)
 	itRatingsService = comment_ratings_service.NewCommentRatingsService(
-		itRatingsRepo, itCommentsRepo, itDebatesRepo, core_realtime.NewHub(),
+		itRatingsRepo, itCommentsRepo, itDebatesRepo, itTxManager, core_realtime.NewHub(),
 	)
 	itPostsService = posts_service.NewPostsService(
 		itPostsRepo, nopImagesService{}, itDebatesRepo, itSidesRepo, itTxManager,

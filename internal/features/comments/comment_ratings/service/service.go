@@ -5,18 +5,21 @@ import (
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_realtime "github.com/qandoni/debatesApp/internal/core/realtime"
+	core_postgres "github.com/qandoni/debatesApp/internal/core/repository/postgres"
 )
 
 func NewCommentRatingsService(
 	commentRatingsRepository CommentRatingsRepository,
 	commentsRepository CommentsRepository,
 	debatesRepository DebatesRepository,
+	txManager core_postgres.TransactionManager,
 	realtimeHub core_realtime.Publisher,
 ) *CommentRatingsService {
 	return &CommentRatingsService{
 		commentRatingsRepository,
 		commentsRepository,
 		debatesRepository,
+		txManager,
 		realtimeHub,
 	}
 }
@@ -25,13 +28,12 @@ type CommentRatingsService struct {
 	commentRatingsRepository CommentRatingsRepository
 	commentsRepository       CommentsRepository
 	debatesRepository        DebatesRepository
+	txManager                core_postgres.TransactionManager
 	realtimeHub              core_realtime.Publisher
 }
 
-// publishEvent отправляет событие всем подписчикам топика поста.
-// Вызывается только после успешной записи в репозитории.
-func (s *CommentRatingsService) publishEvent(postID int, eventType string, data any) {
-	s.realtimeHub.Publish(
+func (s *CommentRatingsService) publishEvent(postID int, eventType string, data any) error {
+	return s.realtimeHub.Publish(
 		core_realtime.PostTopic(postID),
 		core_realtime.NewEvent(eventType, data),
 	)
@@ -64,6 +66,11 @@ type CommentsRepository interface {
 
 type DebatesRepository interface {
 	GetByPostID(
+		ctx context.Context,
+		postID int,
+	) (domain.Debate, error)
+
+	GetByPostIDForUpdate(
 		ctx context.Context,
 		postID int,
 	) (domain.Debate, error)

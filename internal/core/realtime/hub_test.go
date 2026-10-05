@@ -125,6 +125,58 @@ func TestHub_PublishWithoutSubscribers(t *testing.T) {
 	hub.Publish(PostTopic(99), NewEvent("test.event", nil))
 }
 
+func TestHub_PublishReturnsMarshalError(t *testing.T) {
+	hub := NewHub()
+
+	if err := hub.Publish(PostTopic(1), NewEvent("test.event", make(chan int))); err == nil {
+		t.Fatal("expected marshal error, got nil")
+	}
+}
+
+// reentrantPeer при получении события отписывает сам себя — так себя ведёт
+// реальный Client.Send при переполнении буфера (close → hub.UnsubscribeAll).
+type reentrantPeer struct {
+	hub   *Hub
+	sends int
+}
+
+func (p *reentrantPeer) Send(payload []byte) {
+	p.sends++
+	p.hub.UnsubscribeAll(p)
+}
+
+func TestHub_PublishAllowsSendToUnsubscribe(t *testing.T) {
+	hub := NewHub()
+	peer := &reentrantPeer{hub: hub}
+	hub.Subscribe(PostTopic(1), peer)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- hub.Publish(PostTopic(1), NewEvent("test.event", nil))
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Publish deadlocked: Send must be able to call UnsubscribeAll")
+	}
+
+	if peer.sends != 1 {
+		t.Fatalf("expected 1 send, got %d", peer.sends)
+	}
+
+	// пир отписался во время Send — повторная рассылка ему не идёт
+	if err := hub.Publish(PostTopic(1), NewEvent("test.event", nil)); err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if peer.sends != 1 {
+		t.Fatalf("expected no delivery after unsubscribe, got %d sends", peer.sends)
+	}
+}
+
 func TestHub_ConcurrentPublishSubscribe(t *testing.T) {
 	const (
 		subscribers = 8

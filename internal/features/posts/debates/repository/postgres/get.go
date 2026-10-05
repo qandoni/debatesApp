@@ -23,6 +23,20 @@ FROM debatesApp.debates
 WHERE post_id = $1;
 `
 
+const getByIDForUpdateQuery = `
+SELECT id, post_id, status, end_at, created_at, finished_at, winner_side_id
+FROM debatesApp.debates
+WHERE id = $1
+FOR UPDATE
+`
+
+const getByPostIDForUpdateQuery = `
+SELECT id, post_id, status, end_at, created_at, finished_at, winner_side_id
+FROM debatesApp.debates
+WHERE post_id = $1
+FOR UPDATE
+`
+
 const getAuthorIDQuery = `
 SELECT p.author_id
 FROM debatesApp.debates d
@@ -128,4 +142,87 @@ func (r *DebatesRepository) GetAuthorID(
 		return 0, fmt.Errorf("get debate author id: %w", err)
 	}
 	return authorID, nil
+}
+
+// GetByIDForUpdate читает дебат с блокировкой строки (SELECT ... FOR UPDATE).
+// Только для вызова внутри транзакции: блокировка сериализует проверку статуса
+// OPEN с параллельным FinishDebate и остальными операциями того же дебата.
+func (r *DebatesRepository) GetByIDForUpdate(
+	ctx context.Context,
+	debateID int,
+) (domain.Debate, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
+	db := r.dbFromContext(ctx)
+	row := db.QueryRow(ctx, getByIDForUpdateQuery, debateID)
+	var debateModel DebateModel
+
+	err := row.Scan(
+		&debateModel.ID,
+		&debateModel.PostID,
+		&debateModel.Status,
+		&debateModel.EndAt,
+		&debateModel.CreatedAt,
+		&debateModel.FinishedAt,
+		&debateModel.WinnerSideID,
+	)
+	if err != nil {
+		if errors.Is(err, core_postgres_pool.ErrNoRows) {
+			return domain.Debate{}, fmt.Errorf("debate with id='%d': %w", debateID, core_errors.ErrNotFound)
+		}
+		return domain.Debate{}, fmt.Errorf("scan error: %w", err)
+	}
+
+	debateDomain := domain.NewDebate(
+		debateModel.ID,
+		debateModel.PostID,
+		debateModel.Status,
+		debateModel.EndAt,
+		debateModel.CreatedAt,
+		debateModel.FinishedAt,
+		debateModel.WinnerSideID,
+	)
+	return debateDomain, nil
+}
+
+// GetByPostIDForUpdate — то же, что GetByPostID, но с блокировкой строки
+// дебата. Только внутри транзакции (см. GetByIDForUpdate).
+func (r *DebatesRepository) GetByPostIDForUpdate(
+	ctx context.Context,
+	postID int,
+) (domain.Debate, error) {
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
+	db := r.dbFromContext(ctx)
+	row := db.QueryRow(ctx, getByPostIDForUpdateQuery, postID)
+	var debateModel DebateModel
+
+	err := row.Scan(
+		&debateModel.ID,
+		&debateModel.PostID,
+		&debateModel.Status,
+		&debateModel.EndAt,
+		&debateModel.CreatedAt,
+		&debateModel.FinishedAt,
+		&debateModel.WinnerSideID,
+	)
+	if err != nil {
+		if errors.Is(err, core_postgres_pool.ErrNoRows) {
+			return domain.Debate{}, fmt.Errorf("post with id='%d': %w", postID, core_errors.ErrNotFound)
+		}
+		return domain.Debate{}, fmt.Errorf("scan error: %w", err)
+	}
+
+	debateDomain := domain.NewDebate(
+		debateModel.ID,
+		debateModel.PostID,
+		debateModel.Status,
+		debateModel.EndAt,
+		debateModel.CreatedAt,
+		debateModel.FinishedAt,
+		debateModel.WinnerSideID,
+	)
+	return debateDomain, nil
 }

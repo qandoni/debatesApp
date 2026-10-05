@@ -18,7 +18,9 @@ func (s *CommentsService) validateArgumentCreation(
 		return fmt.Errorf("get post: %w", err)
 	}
 
-	debate, err := s.debatesRepository.GetByPostID(ctx, postID)
+	// Блокировка строки дебата (FOR UPDATE) — внутри транзакции CreateArgument:
+	// статус и право голоса не меняются между проверкой и записью аргумента.
+	debate, err := s.debatesRepository.GetByPostIDForUpdate(ctx, postID)
 	if err != nil {
 		return fmt.Errorf("get debate: %w", err)
 	}
