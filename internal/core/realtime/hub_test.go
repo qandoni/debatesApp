@@ -10,8 +10,9 @@ import (
 )
 
 type peerMock struct {
-	mtx      sync.Mutex
-	payloads [][]byte
+	mtx       sync.Mutex
+	payloads  [][]byte
+	shutdowns int
 }
 
 func (m *peerMock) Send(payload []byte) {
@@ -19,6 +20,13 @@ func (m *peerMock) Send(payload []byte) {
 	defer m.mtx.Unlock()
 
 	m.payloads = append(m.payloads, payload)
+}
+
+func (m *peerMock) Shutdown() {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
+	m.shutdowns++
 }
 
 func (m *peerMock) count() int {
@@ -133,8 +141,6 @@ func TestHub_PublishReturnsMarshalError(t *testing.T) {
 	}
 }
 
-// reentrantPeer при получении события отписывает сам себя — так себя ведёт
-// реальный Client.Send при переполнении буфера (close → hub.UnsubscribeAll).
 type reentrantPeer struct {
 	hub   *Hub
 	sends int
@@ -144,6 +150,8 @@ func (p *reentrantPeer) Send(payload []byte) {
 	p.sends++
 	p.hub.UnsubscribeAll(p)
 }
+
+func (p *reentrantPeer) Shutdown() {}
 
 func TestHub_PublishAllowsSendToUnsubscribe(t *testing.T) {
 	hub := NewHub()
@@ -355,4 +363,18 @@ func TestNewDebateFinishedData(t *testing.T) {
 	}
 
 	assertJSONKeys(t, data, "debate_id", "post_id", "winner_side_id", "finished_by_user_id")
+}
+
+func TestHub_ShutdownClosesEachPeerOnce(t *testing.T) {
+	hub := NewHub()
+	peer := &peerMock{}
+
+	hub.Subscribe(PostTopic(1), peer)
+	hub.Subscribe(PostTopic(2), peer)
+
+	hub.Shutdown()
+
+	if peer.shutdowns != 1 {
+		t.Fatalf("expected peer to be shut down once, got %d", peer.shutdowns)
+	}
 }

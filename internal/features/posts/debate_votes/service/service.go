@@ -54,8 +54,6 @@ type CommentsRepository interface {
 type DebatesRepository interface {
 	GetByID(ctx context.Context, debateID int) (domain.Debate, error)
 
-	// GetByIDForUpdate читает дебат с блокировкой строки (FOR UPDATE).
-	// Вызывать только внутри WithinTransaction.
 	GetByIDForUpdate(ctx context.Context, debateID int) (domain.Debate, error)
 
 	FinishDebate(

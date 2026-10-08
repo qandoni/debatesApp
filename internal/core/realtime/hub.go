@@ -9,63 +9,117 @@ import (
 
 type Peer interface {
 	Send(payload []byte)
+	Shutdown()
 }
 
 type Publisher interface {
 	Publish(topic string, event Event) error
 }
 
-func NewHub() *Hub {
-	return &Hub{
-		mtx:    &sync.RWMutex{},
-		topics: make(map[string]map[Peer]struct{}),
-	}
+type peerSet struct {
+	mtx   sync.RWMutex
+	peers map[Peer]struct{}
 }
 
-// Hub хранит все подписки в единственной map «топик → подписчики»: она
-// является единственным источником истины, поэтому вторая обратная map и
-// ручная синхронизация между ними не нужны. Пустые топики удаляются при
-// отписке, поэтому UnsubscribeAll обходит только активные топики.
+func newPeerSet() *peerSet {
+	return &peerSet{peers: make(map[Peer]struct{})}
+}
+
+func NewHub() *Hub {
+	return &Hub{}
+}
+
 type Hub struct {
-	mtx    *sync.RWMutex
-	topics map[string]map[Peer]struct{}
+	topics sync.Map
 }
 
 func (h *Hub) Subscribe(topic string, peer Peer) {
-	h.mtx.Lock()
-	defer h.mtx.Unlock()
+	for {
+		value, _ := h.topics.LoadOrStore(topic, newPeerSet())
+		set := value.(*peerSet)
 
-	subscribers, ok := h.topics[topic]
-	if !ok {
-		subscribers = make(map[Peer]struct{})
-		h.topics[topic] = subscribers
+		set.mtx.Lock()
+		if current, ok := h.topics.Load(topic); !ok || current != set {
+			set.mtx.Unlock()
+			continue
+		}
+		set.peers[peer] = struct{}{}
+		set.mtx.Unlock()
+		return
 	}
-	subscribers[peer] = struct{}{}
 }
 
 func (h *Hub) Unsubscribe(topic string, peer Peer) {
-	h.mtx.Lock()
-	defer h.mtx.Unlock()
-
-	subscribers, ok := h.topics[topic]
+	value, ok := h.topics.Load(topic)
 	if !ok {
 		return
 	}
-	delete(subscribers, peer)
-	if len(subscribers) == 0 {
-		delete(h.topics, topic)
+	set := value.(*peerSet)
+
+	set.mtx.Lock()
+	defer set.mtx.Unlock()
+
+	h.removePeerLocked(topic, set, peer)
+}
+
+func (h *Hub) removePeerLocked(topic string, set *peerSet, peer Peer) {
+	delete(set.peers, peer)
+	if len(set.peers) == 0 {
+		h.topics.CompareAndDelete(topic, set)
 	}
 }
 
 func (h *Hub) UnsubscribeAll(peer Peer) {
-	h.mtx.Lock()
-	defer h.mtx.Unlock()
+	h.topics.Range(func(key, value any) bool {
+		set := value.(*peerSet)
 
-	for topic, subscribers := range h.topics {
-		delete(subscribers, peer)
-		if len(subscribers) == 0 {
-			delete(h.topics, topic)
+		set.mtx.Lock()
+		h.removePeerLocked(key.(string), set, peer)
+		set.mtx.Unlock()
+		return true
+	})
+}
+
+func (h *Hub) subscribers(topic string) []Peer {
+	value, ok := h.topics.Load(topic)
+	if !ok {
+		return nil
+	}
+	set := value.(*peerSet)
+
+	set.mtx.RLock()
+	defer set.mtx.RUnlock()
+
+	peers := make([]Peer, 0, len(set.peers))
+	for peer := range set.peers {
+		peers = append(peers, peer)
+	}
+	return peers
+}
+
+func (h *Hub) allPeers() []Peer {
+	seen := make(map[Peer]struct{})
+
+	h.topics.Range(func(_, value any) bool {
+		set := value.(*peerSet)
+		set.mtx.RLock()
+		for peer := range set.peers {
+			seen[peer] = struct{}{}
 		}
+		set.mtx.RUnlock()
+		return true
+	})
+
+	peers := make([]Peer, 0, len(seen))
+	for peer := range seen {
+		peers = append(peers, peer)
+	}
+	return peers
+}
+
+func (h *Hub) Shutdown() {
+	for _, peer := range h.allPeers() {
+		peer.Shutdown()
 	}
 }
 
@@ -82,18 +136,16 @@ func (h *Hub) Publish(topic string, event Event) error {
 		return fmt.Errorf("marshal event envelope: %w", err)
 	}
 
-	// Снапшот подписчиков снимается под RLock, а отправка идёт уже без
-	// блокировки: Peer.Send может обращаться к Hub (например, отписываться
-	// при переполнении буфера), удержание RLock здесь приводило к само-дедлоку.
-	h.mtx.RLock()
-	subscribers := make([]Peer, 0, len(h.topics[topic]))
-	for peer := range h.topics[topic] {
-		subscribers = append(subscribers, peer)
-	}
-	h.mtx.RUnlock()
+	peers := h.subscribers(topic)
 
-	for _, peer := range subscribers {
-		peer.Send(payload)
+	var wg sync.WaitGroup
+	wg.Add(len(peers))
+	for _, peer := range peers {
+		go func(peer Peer) {
+			defer wg.Done()
+			peer.Send(payload)
+		}(peer)
 	}
+	wg.Wait()
 	return nil
 }
