@@ -36,8 +36,6 @@ func (s *DebateVotesService) FinishDebate(
 
 	finishedDebate, err := s.debatesRepository.GetByID(ctx, debateID)
 	if err != nil {
-		// Запись уже прошла, поэтому не роняем операцию из-за неудачного
-		// чтения: сообщаем о финише без обогащения (winner_side_id будет null).
 		if publishErr := s.publishEvent(
 			debate.PostID,
 			core_realtime.EventDebateFinished,

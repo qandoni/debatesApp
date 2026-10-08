@@ -132,9 +132,6 @@ func (s *CommentsService) UpdateComment(
 		}
 
 		if comment.DebateSideID != nil {
-			// Блокировка строки дебата сериализует проверку статуса
-			// с параллельным FinishDebate: статус не меняется между
-			// проверкой и записью.
 			debate, err := s.debatesRepository.GetByPostIDForUpdate(txCtx, comment.PostID)
 			if err != nil {
 				return fmt.Errorf("get debate: %w", err)
