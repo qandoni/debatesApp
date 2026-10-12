@@ -13,6 +13,7 @@ import (
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
 )
 
+// TODO продемонстрировать работу метода в лайве, в дебаге начать работу, вызвать метод, положить сервис постгрес, и показать состояния базы данных на разных этапах выполнения теста.
 func (s *ImagesService) CreatePostImages(
 	ctx context.Context,
 	userID int,
@@ -149,21 +150,6 @@ func (s *ImagesService) uploadPostImage(
 
 	return objectName, nil
 }
-
-// func (s *ImagesService) GetByPostID(
-// 	ctx context.Context,
-// 	postID int,
-// ) ([]domain.PostImage, error) {
-// 	_, err := s.postsRepository.GetPost(ctx, postID)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("get post: %w", err)
-// 	}
-// 	images, err := s.postImagesRepository.GetByPostID(ctx, postID)
-// 	if err != nil {
-// 		return []domain.PostImage{}, fmt.Errorf("get post images: %w", err)
-// 	}
-// 	return images, nil
-// } нужно будет перенести проверку на существование поста в пост сервис
 
 func (s *ImagesService) GetByPostID(
 	ctx context.Context,

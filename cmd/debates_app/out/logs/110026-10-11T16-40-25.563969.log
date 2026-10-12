@@ -1,0 +1,2 @@
+2026-10-11T20:40:25.564027	DEBUG	debates_app/main.go:64	initializing postgres connection pool
+2026-10-11T20:40:25.571290	FATAL	debates_app/main.go:70	failed to init postgres connection pool	{"error": "pgxpool ping: failed to connect to `user=user-1 database=`:\n\t127.0.0.1:5432 (localhost): tls error: server refused TLS connection\n\t127.0.0.1:5432 (localhost): server error: FATAL: database \"user-1\" does not exist (SQLSTATE 3D000)"}
