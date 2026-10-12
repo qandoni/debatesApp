@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -34,14 +35,15 @@ func NewClient(
 	conn.SetReadLimit(config.ReadLimit)
 
 	return &Client{
-		conn:   conn,
-		hub:    hub,
-		parser: parser,
-		config: config,
-		log:    log,
-		send:   make(chan []byte, config.SendBufferSize),
-		done:   make(chan struct{}),
-		once:   new(sync.Once),
+		conn:    conn,
+		hub:     hub,
+		parser:  parser,
+		config:  config,
+		log:     log,
+		send:    make(chan []byte, config.SendBufferSize),
+		done:    make(chan struct{}),
+		once:    new(sync.Once),
+		stopped: make(chan struct{}),
 	}
 }
 
@@ -52,10 +54,12 @@ type Client struct {
 	config Config
 	log    *core_logger.Logger
 
-	send   chan []byte
-	done   chan struct{}
-	once   *sync.Once
-	userID int
+	send      chan []byte
+	done      chan struct{}
+	once      *sync.Once
+	stopped   chan struct{}
+	goingAway atomic.Bool
+	userID    int
 }
 
 func (c *Client) Send(payload []byte) {
@@ -80,18 +84,31 @@ func (c *Client) close() {
 	})
 }
 
+func (c *Client) Shutdown() {
+	c.goingAway.Store(true)
+	c.close()
+	<-c.stopped
+}
+
 func (c *Client) Run() {
 	remoteAddr := c.remoteAddr()
 
-	defer c.close()
+	writeDone := make(chan struct{})
+	go func() {
+		defer close(writeDone)
+		c.writePump()
+	}()
+
 	defer func() {
+		c.close()
+		<-writeDone
 		c.log.Debug("websocket client disconnected",
 			zap.Int("user_id", c.userID),
 			zap.String("remote_addr", remoteAddr),
 		)
+		close(c.stopped)
 	}()
 
-	go c.writePump()
 	if err := c.authenticate(); err != nil {
 		c.log.Warn("websocket authentication failed",
 			zap.String("remote_addr", remoteAddr),
@@ -255,9 +272,13 @@ func (c *Client) writePump() {
 	ticker := time.NewTicker(c.config.PingPeriod)
 	defer func() {
 		ticker.Stop()
+		code := websocket.CloseNormalClosure
+		if c.goingAway.Load() {
+			code = websocket.CloseGoingAway
+		}
 		_ = c.conn.WriteControl(
 			websocket.CloseMessage,
-			websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+			websocket.FormatCloseMessage(code, ""),
 			time.Now().Add(c.config.WriteWait),
 		)
 		_ = c.conn.Close()

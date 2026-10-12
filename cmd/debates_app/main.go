@@ -81,11 +81,6 @@ func main() {
 	logger.Debug("initializing feature", zap.String("feature", "minio"))
 
 	minioConfig := minio.NewConfigMust()
-	logger.Debug("minio config",
-		zap.String("endpoint", minioConfig.Endpoint),
-		zap.String("bucket", minioConfig.Bucket),
-		zap.Bool("secure", minioConfig.Secure),
-	)
 
 	storage, err := minio.NewStorage(minioConfig)
 	if err != nil {
@@ -164,4 +159,6 @@ func main() {
 			zap.Error(err),
 		)
 	}
+
+	realtimeHub.Shutdown()
 }

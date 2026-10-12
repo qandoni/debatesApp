@@ -79,9 +79,6 @@ func (s *DebateVotesService) ChangeVote(
 	)
 
 	if err := s.txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
-		// Блокировка строки дебата сериализует проверку статуса и
-		// проверку «нет ли уже аргумента» с параллельными FinishDebate
-		// и CreateArgument.
 		debate, err := s.getOpenDebateForUpdate(txCtx, debateID)
 		if err != nil {
 			return fmt.Errorf("get open debate: %w", err)
@@ -134,9 +131,6 @@ func (s *DebateVotesService) ChangeVote(
 	return updatedVote, nil
 }
 
-// getOpenDebateForUpdate читает дебат с блокировкой строки (FOR UPDATE).
-// Вызывается только внутри WithinTransaction: блокировка сериализует
-// проверку статуса с параллельным FinishDebate и операциями того же дебата.
 func (s *DebateVotesService) getOpenDebateForUpdate(
 	ctx context.Context,
 	debateID int,

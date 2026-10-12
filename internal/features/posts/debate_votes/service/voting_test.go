@@ -653,6 +653,8 @@ func (m *peerMock) Send(payload []byte) {
 	m.payloads = append(m.payloads, payload)
 }
 
+func (m *peerMock) Shutdown() {}
+
 // TestVote_DeliversEnvelopeToSubscribedPeer проверяет весь путь события:
 // сервис -> Hub -> сериализованный конверт у подписчика.
 func TestVote_DeliversEnvelopeToSubscribedPeer(t *testing.T) {

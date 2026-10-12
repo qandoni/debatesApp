@@ -9,6 +9,9 @@ import (
 
 type Peer interface {
 	Send(payload []byte)
+	// Shutdown корректно закрывает соединение и блокируется,
+	// пока горутины пира не завершатся.
+	Shutdown()
 }
 
 type Publisher interface {
@@ -16,56 +19,28 @@ type Publisher interface {
 }
 
 func NewHub() *Hub {
-	return &Hub{
-		mtx:    &sync.RWMutex{},
-		topics: make(map[string]map[Peer]struct{}),
-	}
+	return &Hub{}
 }
 
-// Hub хранит все подписки в единственной map «топик → подписчики»: она
-// является единственным источником истины, поэтому вторая обратная map и
-// ручная синхронизация между ними не нужны. Пустые топики удаляются при
-// отписке, поэтому UnsubscribeAll обходит только активные топики.
 type Hub struct {
-	mtx    *sync.RWMutex
-	topics map[string]map[Peer]struct{}
+	peers syncMap
 }
 
 func (h *Hub) Subscribe(topic string, peer Peer) {
-	h.mtx.Lock()
-	defer h.mtx.Unlock()
-
-	subscribers, ok := h.topics[topic]
-	if !ok {
-		subscribers = make(map[Peer]struct{})
-		h.topics[topic] = subscribers
-	}
-	subscribers[peer] = struct{}{}
+	h.peers.Add(topic, peer)
 }
 
 func (h *Hub) Unsubscribe(topic string, peer Peer) {
-	h.mtx.Lock()
-	defer h.mtx.Unlock()
-
-	subscribers, ok := h.topics[topic]
-	if !ok {
-		return
-	}
-	delete(subscribers, peer)
-	if len(subscribers) == 0 {
-		delete(h.topics, topic)
-	}
+	h.peers.Remove(topic, peer)
 }
 
 func (h *Hub) UnsubscribeAll(peer Peer) {
-	h.mtx.Lock()
-	defer h.mtx.Unlock()
+	h.peers.RemoveFromAll(peer)
+}
 
-	for topic, subscribers := range h.topics {
-		delete(subscribers, peer)
-		if len(subscribers) == 0 {
-			delete(h.topics, topic)
-		}
+func (h *Hub) Shutdown() {
+	for _, peer := range h.peers.All() {
+		peer.Shutdown()
 	}
 }
 
@@ -82,18 +57,16 @@ func (h *Hub) Publish(topic string, event Event) error {
 		return fmt.Errorf("marshal event envelope: %w", err)
 	}
 
-	// Снапшот подписчиков снимается под RLock, а отправка идёт уже без
-	// блокировки: Peer.Send может обращаться к Hub (например, отписываться
-	// при переполнении буфера), удержание RLock здесь приводило к само-дедлоку.
-	h.mtx.RLock()
-	subscribers := make([]Peer, 0, len(h.topics[topic]))
-	for peer := range h.topics[topic] {
-		subscribers = append(subscribers, peer)
-	}
-	h.mtx.RUnlock()
+	peers := h.peers.Snapshot(topic)
 
-	for _, peer := range subscribers {
-		peer.Send(payload)
+	var wg sync.WaitGroup
+	wg.Add(len(peers))
+	for _, peer := range peers {
+		go func(peer Peer) {
+			defer wg.Done()
+			peer.Send(payload)
+		}(peer)
 	}
+	wg.Wait()
 	return nil
 }
