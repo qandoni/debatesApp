@@ -87,7 +87,7 @@ type mockImagesService struct {
 	createPostImagesFn  func(ctx context.Context, userID, postID int, files []*multipart.FileHeader) ([]domain.PostImage, error)
 	deleteRecordsFn     func(ctx context.Context, postID int) error
 	getByPostIDsFn      func(ctx context.Context, postIDs []int) (map[int][]domain.PostImage, error)
-	deleteFromStorageFn func(ctx context.Context, images []domain.PostImage) error
+	deleteFromStorageFn func(ctx context.Context, images []domain.PostImage) []string
 }
 
 func (m *mockImagesService) GetByPostID(ctx context.Context, postID int) ([]domain.PostImage, error) {
@@ -106,8 +106,11 @@ func (m *mockImagesService) GetByPostIDs(ctx context.Context, postIDs []int) (ma
 	return m.getByPostIDsFn(ctx, postIDs)
 }
 
-func (m *mockImagesService) DeleteFromStorage(ctx context.Context, images []domain.PostImage) error {
-	return m.deleteFromStorageFn(ctx, images)
+func (m *mockImagesService) DeleteFromStorage(ctx context.Context, images []domain.PostImage) []string {
+	if m.deleteFromStorageFn != nil {
+		return m.deleteFromStorageFn(ctx, images)
+	}
+	return nil
 }
 
 type mockTxManager struct {
@@ -300,7 +303,7 @@ func TestDeletePost_Success(t *testing.T) {
 		deleteRecordsFn: func(ctx context.Context, postID int) error {
 			return nil
 		},
-		deleteFromStorageFn: func(ctx context.Context, images []domain.PostImage) error {
+		deleteFromStorageFn: func(ctx context.Context, images []domain.PostImage) []string {
 			if len(images) != 1 {
 				t.Fatalf("expected 1 image, got %d", len(images))
 			}
@@ -321,3 +324,101 @@ func TestDeletePost_Success(t *testing.T) {
 }
 
 var _ = time.Now
+
+func TestDeletePost_CommitFailureKeepsStorageIntact(t *testing.T) {
+	storageCalled := false
+	rowsDeleted := false
+	postsRepo := &mockPostsRepository{
+		getPostFn: func(ctx context.Context, postID int) (domain.Post, error) {
+			return domain.Post{ID: 1, AuthorID: 5}, nil
+		},
+		deletePostFn: func(ctx context.Context, userID, postID int) error {
+			return nil
+		},
+	}
+	imagesSvc := &mockImagesService{
+		getByPostIDFn: func(ctx context.Context, postID int) ([]domain.PostImage, error) {
+			return []domain.PostImage{{ID: 1, ImageURL: "posts/1/a.png"}}, nil
+		},
+		deleteRecordsFn: func(ctx context.Context, postID int) error {
+			rowsDeleted = true
+			return nil
+		},
+		deleteFromStorageFn: func(ctx context.Context, images []domain.PostImage) []string {
+			storageCalled = true
+			return nil
+		},
+	}
+	// симулируем падение коммита: замыкание tx выполнилось, commit упал
+	tx := &mockTxManager{
+		withinFn: func(ctx context.Context, fn func(ctx context.Context) error) error {
+			if err := fn(ctx); err != nil {
+				return err
+			}
+			return errors.New("commit failed")
+		},
+	}
+
+	svc := newPostsService(postsRepo, imagesSvc, &mockDebatesRepository{}, &mockDebateSidesRepository{}, tx)
+	err := svc.DeletePost(context.Background(), 5, 1)
+	if err == nil {
+		t.Fatal("expected commit error, got nil")
+	}
+	// при падении коммита файлы из MinIO не трогаем: БД и хранилище
+	// остаются согласованными, повторное удаление поста безопасно
+	if storageCalled {
+		t.Fatal("storage must not be touched when commit fails")
+	}
+	// строки-журнал не удалены ни в tx1, ни позже: повторное удаление
+	// поста после восстановления БД безопасно
+	if rowsDeleted {
+		t.Fatal("image rows must be kept when commit fails")
+	}
+}
+
+func TestDeletePost_StorageOrphansKeepJournalRows(t *testing.T) {
+	storageCalled := false
+	rowsDeleted := false
+	postsRepo := &mockPostsRepository{
+		getPostFn: func(ctx context.Context, postID int) (domain.Post, error) {
+			return domain.Post{ID: 1, AuthorID: 5}, nil
+		},
+		deletePostFn: func(ctx context.Context, userID, postID int) error {
+			return nil
+		},
+	}
+	imagesSvc := &mockImagesService{
+		getByPostIDFn: func(ctx context.Context, postID int) ([]domain.PostImage, error) {
+			return []domain.PostImage{{ID: 1, ImageURL: "posts/1/a.png"}}, nil
+		},
+		deleteRecordsFn: func(ctx context.Context, postID int) error {
+			rowsDeleted = true
+			return nil
+		},
+		// MinIO «упал»: возвращаем сироту — журнал строк должен сохраниться
+		// для recovery при рестарте
+		deleteFromStorageFn: func(ctx context.Context, images []domain.PostImage) []string {
+			storageCalled = true
+			return []string{"posts/1/a.png"}
+		},
+	}
+	tx := &mockTxManager{
+		withinFn: func(ctx context.Context, fn func(ctx context.Context) error) error {
+			return fn(ctx)
+		},
+	}
+
+	svc := newPostsService(postsRepo, imagesSvc, &mockDebatesRepository{}, &mockDebateSidesRepository{}, tx)
+	err := svc.DeletePost(context.Background(), 5, 1)
+	if err != nil {
+		t.Fatalf("post deleted in DB: storage failure must not fail the operation, got: %v", err)
+	}
+	if !storageCalled {
+		t.Fatal("expected storage deletion attempted after successful commit")
+	}
+	// строки-журнал сохранены: recovery доделает удаление файлов
+	// при следующем старте процесса
+	if rowsDeleted {
+		t.Fatal("image rows must be kept while files are orphaned")
+	}
+}

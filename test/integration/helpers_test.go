@@ -128,7 +128,7 @@ func (nopImagesService) GetByPostIDs(ctx context.Context, postIDs []int) (map[in
 	return map[int][]domain.PostImage{}, nil
 }
 
-func (nopImagesService) DeleteFromStorage(ctx context.Context, images []domain.PostImage) error {
+func (nopImagesService) DeleteFromStorage(ctx context.Context, images []domain.PostImage) []string {
 	return nil
 }
 

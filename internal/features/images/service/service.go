@@ -2,6 +2,8 @@ package images_service
 
 import (
 	"context"
+	"io"
+	"time"
 
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_postgres "github.com/qandoni/debatesApp/internal/core/repository/postgres"
@@ -9,13 +11,13 @@ import (
 )
 
 func NewImagesService(
-	storage storage.ImageStorage,
+	minio MinioManager,
 	postsRepository PostsRepository,
 	postImagesRepository PostImagesRepository,
 	txManager core_postgres.TransactionManager,
 ) *ImagesService {
 	return &ImagesService{
-		storage,
+		minio,
 		postsRepository,
 		postImagesRepository,
 		txManager,
@@ -23,25 +25,34 @@ func NewImagesService(
 }
 
 type ImagesService struct {
-	storage              storage.ImageStorage
+	minio                MinioManager
 	postsRepository      PostsRepository
 	postImagesRepository PostImagesRepository
 	txManager            core_postgres.TransactionManager
 }
 
 func NewAvatarService(
-	storage storage.ImageStorage,
+	minio MinioManager,
 	usersRepository UsersRepository,
 ) *AvatarService {
 	return &AvatarService{
-		storage,
+		minio,
 		usersRepository,
 	}
 }
 
 type AvatarService struct {
-	storage         storage.ImageStorage
+	minio           MinioManager
 	usersRepository UsersRepository
+}
+
+type MinioManager interface {
+	Upload(ctx context.Context, objectName string, reader io.Reader, size int64, contentType string) error
+	Begin() *storage.Tx
+	GetURL(ctx context.Context, objectName string) (string, error)
+	ObjectExists(ctx context.Context, objectName string) (bool, error)
+	DeleteAll(ctx context.Context, objectNames []string) []string
+	NewObjectName(prefix, extension string) string
 }
 
 type PostsRepository interface {
@@ -68,6 +79,24 @@ type PostImagesRepository interface {
 		ctx context.Context,
 		postIDs []int,
 	) (map[int][]domain.PostImage, error)
+	MarkActiveByIDs(
+		ctx context.Context,
+		imageIDs []int,
+	) error
+	DeletePendingByIDs(
+		ctx context.Context,
+		imageIDs []int,
+	) error
+	GetPending(
+		ctx context.Context,
+	) ([]domain.PostImage, error)
+	GetPendingOlderThan(
+		ctx context.Context,
+		staleAfter time.Duration,
+	) ([]domain.PostImage, error)
+	GetImagesOfDeletedPosts(
+		ctx context.Context,
+	) ([]domain.PostImage, error)
 }
 
 type UsersRepository interface {

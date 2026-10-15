@@ -8,8 +8,8 @@ import (
 )
 
 const createPostImageQuery = `
-INSERT INTO debatesApp.post_images(post_id, image_url, display_order, created_at)
-VALUES($1, $2, $3, $4)
+INSERT INTO debatesApp.post_images(post_id, image_url, display_order, created_at, status)
+VALUES($1, $2, $3, $4, 'PENDING')
 RETURNING
 	id,
 	post_id,

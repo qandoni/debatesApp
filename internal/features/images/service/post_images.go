@@ -7,13 +7,11 @@ import (
 	"mime/multipart"
 	"net/http"
 
-	"github.com/google/uuid"
 	core_config "github.com/qandoni/debatesApp/internal/core/config"
 	"github.com/qandoni/debatesApp/internal/core/domain"
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
 )
 
-// TODO продемонстрировать работу метода в лайве, в дебаге начать работу, вызвать метод, положить сервис постгрес, и показать состояния базы данных на разных этапах выполнения теста.
 func (s *ImagesService) CreatePostImages(
 	ctx context.Context,
 	userID int,
@@ -30,37 +28,21 @@ func (s *ImagesService) CreatePostImages(
 	}
 
 	images := make([]domain.PostImage, 0, len(files))
-	uploadedObjects := make([]string, 0, len(files))
+	contents := make([]string, len(files))
 
 	for i, fileHeader := range files {
-		objectName, err := s.uploadPostImage(
-			ctx,
-			postID,
-			fileHeader,
-		)
+		image, contentType, err := s.preparePostImage(postID, i+1, fileHeader)
 		if err != nil {
-
-			_ = s.deleteUploadedObjects(ctx, uploadedObjects)
-
-			return []domain.PostImage{}, fmt.Errorf(
-				"upload post image: %w",
-				err,
-			)
+			return []domain.PostImage{}, err
 		}
-
-		uploadedObjects = append(uploadedObjects, objectName)
-
-		images = append(images, domain.PostImage{
-			PostID:       postID,
-			ImageURL:     objectName,
-			DisplayOrder: i + 1,
-		})
+		contents[i] = contentType
+		images = append(images, image)
 	}
 
-	err = s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
+	err = s.txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
 		for i := range images {
 			createdImage, err := s.postImagesRepository.CreatePostImage(
-				ctx,
+				txCtx,
 				images[i],
 			)
 			if err != nil {
@@ -72,44 +54,45 @@ func (s *ImagesService) CreatePostImages(
 
 		return nil
 	})
-
 	if err != nil {
-		_ = s.deleteUploadedObjects(ctx, uploadedObjects)
-
 		return []domain.PostImage{}, fmt.Errorf(
 			"create post images transaction: %w",
 			err,
 		)
 	}
 
-	return images, nil
-}
+	for i, fileHeader := range files {
+		if err := s.uploadImage(ctx, images[i].ImageURL, fileHeader, contents[i]); err != nil {
 
-func (s *ImagesService) deleteUploadedObjects(
-	ctx context.Context,
-	objectNames []string,
-) error {
-	for _, objectName := range objectNames {
-		if err := s.storage.Delete(ctx, objectName); err != nil {
-			return fmt.Errorf(
-				"delete uploaded image %q: %w",
-				objectName,
-				err,
-			)
+			if cleanupErr := s.minio.DeleteAll(ctx, imageNames(images)); cleanupErr != nil {
+				return []domain.PostImage{}, fmt.Errorf(
+					"upload post image: %v, minio cleanup failed: %v",
+					err,
+					cleanupErr,
+				)
+			}
+			return []domain.PostImage{}, fmt.Errorf("upload post image: %w", err)
 		}
 	}
 
-	return nil
+	err = s.txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return s.postImagesRepository.MarkActiveByIDs(txCtx, imageIDs(images))
+	})
+	if err != nil {
+		return []domain.PostImage{}, fmt.Errorf("activate post images: %w", err)
+	}
+
+	return images, nil
 }
 
-func (s *ImagesService) uploadPostImage(
-	ctx context.Context,
+func (s *ImagesService) preparePostImage(
 	postID int,
+	order int,
 	fileHeader *multipart.FileHeader,
-) (string, error) {
+) (domain.PostImage, string, error) {
 	file, err := fileHeader.Open()
 	if err != nil {
-		return "", fmt.Errorf("open image: %w", err)
+		return domain.PostImage{}, "", fmt.Errorf("open image: %w", err)
 	}
 	defer file.Close()
 
@@ -117,38 +100,64 @@ func (s *ImagesService) uploadPostImage(
 
 	n, err := file.Read(buffer)
 	if err != nil {
-		return "", fmt.Errorf("read buffer: %w", err)
+		return domain.PostImage{}, "", fmt.Errorf("read buffer: %w", err)
 	}
 
 	contentType := http.DetectContentType(buffer[:n])
 
 	extension, ok := core_config.ExtensionByContentType(contentType)
 	if !ok {
-		return "", core_errors.ErrUnsupportedMediaType
+		return domain.PostImage{}, "", core_errors.ErrUnsupportedMediaType
 	}
 
-	if _, err := file.Seek(0, io.SeekStart); err != nil {
-		return "", fmt.Errorf("seek: %w", err)
-	}
-
-	objectName := fmt.Sprintf(
-		"posts/%d/%s%s",
-		postID,
-		uuid.New().String(),
+	objectName := s.minio.NewObjectName(
+		fmt.Sprintf("posts/%d", postID),
 		extension,
 	)
 
-	if err := s.storage.Upload(
-		ctx,
-		objectName,
-		file,
-		fileHeader.Size,
-		contentType,
-	); err != nil {
-		return "", fmt.Errorf("upload image: %w", err)
+	return domain.PostImage{
+		PostID:       postID,
+		ImageURL:     objectName,
+		DisplayOrder: order,
+	}, contentType, nil
+}
+
+func (s *ImagesService) uploadImage(
+	ctx context.Context,
+	objectName string,
+	fileHeader *multipart.FileHeader,
+	contentType string,
+) error {
+	file, err := fileHeader.Open()
+	if err != nil {
+		return fmt.Errorf("open image: %w", err)
+	}
+	defer file.Close()
+
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("seek: %w", err)
 	}
 
-	return objectName, nil
+	if err := s.minio.Upload(ctx, objectName, file, fileHeader.Size, contentType); err != nil {
+		return err
+	}
+	return nil
+}
+
+func imageNames(images []domain.PostImage) []string {
+	names := make([]string, 0, len(images))
+	for _, image := range images {
+		names = append(names, image.ImageURL)
+	}
+	return names
+}
+
+func imageIDs(images []domain.PostImage) []int {
+	ids := make([]int, 0, len(images))
+	for _, image := range images {
+		ids = append(ids, image.ID)
+	}
+	return ids
 }
 
 func (s *ImagesService) GetByPostID(
@@ -189,16 +198,6 @@ func (s *ImagesService) DeleteRecordsByPostID(
 func (s *ImagesService) DeleteFromStorage(
 	ctx context.Context,
 	images []domain.PostImage,
-) error {
-	for _, image := range images {
-		if err := s.storage.Delete(ctx, image.ImageURL); err != nil {
-			return fmt.Errorf(
-				"delete image %q from storage: %w",
-				image.ImageURL,
-				err,
-			)
-		}
-	}
-
-	return nil
+) []string {
+	return s.minio.DeleteAll(ctx, imageNames(images))
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	core_logger "github.com/qandoni/debatesApp/internal/core/logger"
@@ -38,6 +39,7 @@ import (
 	statistics_repository "github.com/qandoni/debatesApp/internal/features/statistics/repository/postgres"
 	statistics_service "github.com/qandoni/debatesApp/internal/features/statistics/service"
 	statistics_http_transport "github.com/qandoni/debatesApp/internal/features/statistics/transport/http"
+	"github.com/qandoni/debatesApp/internal/features/storage"
 	"github.com/qandoni/debatesApp/internal/features/storage/minio"
 	users_repository "github.com/qandoni/debatesApp/internal/features/users/repository"
 	users_service "github.com/qandoni/debatesApp/internal/features/users/service"
@@ -82,19 +84,21 @@ func main() {
 
 	minioConfig := minio.NewConfigMust()
 
-	storage, err := minio.NewStorage(minioConfig)
+	minioStorage, err := minio.NewStorage(minioConfig)
 	if err != nil {
 		fmt.Println("initialize minio storage:", err)
 	}
 
-	if err := storage.EnsureBucket(ctx); err != nil {
+	if err := minioStorage.EnsureBucket(ctx); err != nil {
 		fmt.Println("ensure minio bucket:", err)
 	}
+
+	minioManager := storage.NewManager(minioStorage, logger)
 
 	logger.Debug("initializing feature", zap.String("feature", "users"))
 	passwordHasher := core_password.NewBcryptHasher()
 	usersRepository := users_repository.NewUsersRepository(pool, pool.OpTimeout())
-	avatarService := images_service.NewAvatarService(storage, usersRepository)
+	avatarService := images_service.NewAvatarService(minioManager, usersRepository)
 	usersService := users_service.NewUsersService(usersRepository, passwordHasher)
 	usersHTTPTransport := users_http_transport.NewUsersHTTPHandler(usersService, avatarService, jwt)
 
@@ -106,7 +110,7 @@ func main() {
 	logger.Debug("initializing feature", zap.String("feature", "posts"))
 	postsRepository := posts_repository.NewPostsRepository(pool, pool.OpTimeout())
 	postImagesRepository := post_images_repository.NewPostImagesRepository(pool, pool.OpTimeout())
-	imagesService := images_service.NewImagesService(storage, postsRepository, postImagesRepository, txManager)
+	imagesService := images_service.NewImagesService(minioManager, postsRepository, postImagesRepository, txManager)
 	debatesRepository := debates_repository.NewDebatesRepository(pool, pool.OpTimeout())
 	debatesSidesRepository := debate_sides_repository.NewDebateSidesRepository(pool, pool.OpTimeout())
 	postsService := posts_service.NewPostsService(postsRepository, imagesService, debatesRepository, debatesSidesRepository, txManager)
@@ -153,6 +157,14 @@ func main() {
 		statisticsHTTPHandler,
 		wsHandler,
 	)
+
+	logger.Debug("recovering unfinished minio operations")
+	if err := imagesService.Recover(ctx); err != nil {
+		logger.Error("minio recovery failed", zap.Error(err))
+	}
+
+	go runPeriodicRecovery(ctx, logger, imagesService, recoveryInterval, recoveryStaleAfter)
+
 	if err := server.Run(ctx); err != nil {
 		logger.Error(
 			"http server stopped",
@@ -161,4 +173,32 @@ func main() {
 	}
 
 	realtimeHub.Shutdown()
+}
+
+const (
+	recoveryInterval   = time.Hour
+	recoveryStaleAfter = 5 * time.Minute
+)
+
+func runPeriodicRecovery(
+	ctx context.Context,
+	logger *core_logger.Logger,
+	imagesService *images_service.ImagesService,
+	interval time.Duration,
+	staleAfter time.Duration,
+) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			logger.Debug("recovering unfinished minio operations")
+			if err := imagesService.RecoverStale(ctx, staleAfter); err != nil {
+				logger.Error("minio recovery failed", zap.Error(err))
+			}
+		}
+	}
 }

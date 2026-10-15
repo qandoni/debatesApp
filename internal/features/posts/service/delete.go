@@ -26,21 +26,24 @@ func (s *PostsService) DeletePost(
 		return fmt.Errorf("get post images: %w", err)
 	}
 
-	if err := s.txManager.WithinTransaction(ctx, func(ctx context.Context) error {
-		if err := s.imagesService.DeleteRecordsByPostID(ctx, postID); err != nil {
-			return err
-		}
-
-		if err := s.postsRepository.DeletePost(ctx, userID, postID); err != nil {
+	if err := s.txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if err := s.postsRepository.DeletePost(txCtx, userID, postID); err != nil {
 			return fmt.Errorf("delete post: %w", err)
 		}
-
 		return nil
 	}); err != nil {
 		return fmt.Errorf("delete post transaction: %w", err)
 	}
-	if err := s.imagesService.DeleteFromStorage(ctx, images); err != nil {
-		return fmt.Errorf("delete post images from storage: %w", err)
+
+	orphaned := s.imagesService.DeleteFromStorage(ctx, images)
+	if len(orphaned) > 0 {
+		return nil
+	}
+
+	if err := s.txManager.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return s.imagesService.DeleteRecordsByPostID(txCtx, postID)
+	}); err != nil {
+		return nil
 	}
 
 	return nil

@@ -37,7 +37,7 @@ type ImagesService interface {
 	DeleteFromStorage(
 		ctx context.Context,
 		images []domain.PostImage,
-	) error
+	) []string
 }
 
 type PostsService interface {

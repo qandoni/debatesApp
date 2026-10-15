@@ -23,4 +23,9 @@ type ImageStorage interface {
 		ctx context.Context,
 		objectName string,
 	) (string, error)
+
+	ObjectExists(
+		ctx context.Context,
+		objectName string,
+	) (bool, error)
 }

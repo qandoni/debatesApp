@@ -24,3 +24,25 @@ func (r *PostImagesRepository) DeleteByPostID(
 	}
 	return nil
 }
+
+const deletePendingByIDsQuery = `
+DELETE FROM debatesApp.post_images
+WHERE id = ANY($1) AND status = 'PENDING';
+`
+
+func (r *PostImagesRepository) DeletePendingByIDs(
+	ctx context.Context,
+	imageIDs []int,
+) error {
+	if len(imageIDs) == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+	defer cancel()
+
+	db := r.dbFromContext(ctx)
+	if _, err := db.Exec(ctx, deletePendingByIDsQuery, imageIDs); err != nil {
+		return fmt.Errorf("delete pending post_images: %w", err)
+	}
+	return nil
+}
