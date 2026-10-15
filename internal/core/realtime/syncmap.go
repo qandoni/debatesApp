@@ -2,19 +2,10 @@ package core_realtime
 
 import "sync"
 
-// syncMap — обёртка над sync.Map для «множеств по ключам»:
-// ключ (топик) → множество элементов (подписчиков).
-//
-// Внутри обёртки находится ВСЁ: сама sync.Map, локи обычных map-наборов
-// (mapEntry.mtx) и инвариантная логика — создание набора, защита от гонки
-// с чисткой пустых, чистка, снапшоты. Hub работает только с этими
-// готовыми операциями и не знает о внутренней структуре.
 type syncMap struct {
-	entries sync.Map // string → *mapEntry
+	entries sync.Map
 }
 
-// mapEntry — один набор элементов: обычную map защищает собственный лок,
-// т.к. sync.Map синхронизирует только указатель на значение.
 type mapEntry struct {
 	mtx   sync.RWMutex
 	items map[Peer]struct{}

@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/google/uuid"
 	core_config "github.com/qandoni/debatesApp/internal/core/config"
 	core_errors "github.com/qandoni/debatesApp/internal/core/errors"
 )
@@ -42,14 +41,14 @@ func (s *AvatarService) UploadAvatar(
 		}
 	}
 
-	objectName := fmt.Sprintf(
-		"users/%d/avatar/%s%s",
-		userID,
-		uuid.New().String(),
+	objectName := s.minio.NewObjectName(
+		fmt.Sprintf("users/%d/avatar", userID),
 		extension,
 	)
 
-	if err := s.storage.Upload(
+	tx := s.minio.Begin()
+
+	if err := tx.Upload(
 		ctx,
 		objectName,
 		reader,
@@ -59,12 +58,12 @@ func (s *AvatarService) UploadAvatar(
 		return fmt.Errorf("upload avatar: %w", err)
 	}
 
-	avatarURL, err := s.storage.GetURL(
+	avatarURL, err := s.minio.GetURL(
 		ctx,
 		objectName,
 	)
 	if err != nil {
-		_ = s.storage.Delete(ctx, objectName)
+		tx.Rollback(ctx)
 
 		return fmt.Errorf("get avatar url: %w", err)
 	}
@@ -75,18 +74,17 @@ func (s *AvatarService) UploadAvatar(
 		avatarURL,
 	)
 	if err != nil {
-		_ = s.storage.Delete(ctx, objectName)
+		tx.Rollback(ctx)
 
 		return fmt.Errorf("update avatar url: %w", err)
 	}
+	tx.Commit()
 
 	if oldAvatarURL != nil && *oldAvatarURL != "" {
 		oldObjectName := core_config.ExtractObjectName(*oldAvatarURL)
 
 		if oldObjectName != "" {
-			if err := s.storage.Delete(ctx, oldObjectName); err != nil {
-				return fmt.Errorf("delete old avatar: %w", err)
-			}
+			s.minio.DeleteAll(ctx, []string{oldObjectName})
 		}
 	}
 

@@ -94,7 +94,7 @@ type ImagesService interface {
 	DeleteFromStorage(
 		ctx context.Context,
 		images []domain.PostImage,
-	) error
+	) []string
 }
 
 func NewPostsService(

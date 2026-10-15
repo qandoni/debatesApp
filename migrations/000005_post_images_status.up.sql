@@ -1,0 +1,2 @@
+ALTER TABLE debatesApp.post_images
+ADD COLUMN status TEXT NOT NULL DEFAULT 'ACTIVE';

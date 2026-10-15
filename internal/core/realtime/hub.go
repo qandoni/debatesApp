@@ -9,8 +9,6 @@ import (
 
 type Peer interface {
 	Send(payload []byte)
-	// Shutdown корректно закрывает соединение и блокируется,
-	// пока горутины пира не завершатся.
 	Shutdown()
 }
 
